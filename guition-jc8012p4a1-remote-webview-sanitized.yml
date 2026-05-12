@@ -13,7 +13,7 @@
 substitutions:
   device_name: "p4-webview"
   friendly_name: "P4 WebView Panel"
-  rwv_server_host: "{your HA IP]"
+  rwv_server_host: "{your HA IP}"
   rwv_server_port: "8081"
   rwv_device_id: "p4-panel-1"
 
