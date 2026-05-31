@@ -31,10 +31,11 @@ esphome:
       # Hard reset the GSL3680 touch controller before it initializes.
       # Without this the controller sometimes starts with stale calibration
       # state from the previous session, causing phantom/ghost touches.
+      # 1000ms hold-down ensures the GSL3680 fully discharges before reinit.
       - switch.turn_off: display_power
-      - delay: 500ms
+      - delay: 1000ms
       - switch.turn_on: display_power
-      - delay: 500ms
+      - delay: 1000ms
       - logger.log: "Display power cycled — GSL3680 reset complete"
 
 esp32:
@@ -181,11 +182,9 @@ i2c:
 # ==============================================================================
 # Touchscreen — GSL3680
 #
-# FIX: Ghost touches after restart are caused by a transform mismatch with
-# remote_webview's rotation: 90 (landscape). The display panel is physically
-# portrait (800x1280). remote_webview rotates the rendered content 90° so it
-# fills the screen in landscape. The touch controller reports raw portrait
-# coordinates which must be transformed to match.
+# The display panel is physically portrait (800x1280). remote_webview rotates
+# rendered content 90° so it fills the screen in landscape. Touch coordinates
+# from the GSL3680 are in raw portrait space and must be transformed to match.
 #
 # For rotation: 90 (landscape, USB on left side):
 #   swap_xy: true   — swaps X and Y axes to match the rotated orientation
@@ -194,7 +193,6 @@ i2c:
 #
 # If touches are still off after flashing, try toggling mirror_x or mirror_y
 # one at a time — the exact values can vary by panel revision.
-# This is set for 90° landscape view, with the transform to match the orientation
 # ==============================================================================
 touchscreen:
   - platform: gsl3680
@@ -202,9 +200,9 @@ touchscreen:
     reset_pin: GPIO22
     interrupt_pin: GPIO21
     transform:
-      mirror_y: false
+      swap_xy: true
       mirror_x: true
-      swap_xy: false
+      mirror_y: false
     on_touch:
       - light.turn_on: backlight
       - lambda: |-
@@ -223,13 +221,28 @@ remote_webview:
   rotation: 90
   full_frame_tile_count: 1
   full_frame_area_threshold: 0.2
-  full_frame_every: 20
+  # Less frequent forced full redraws reduce visual disruption
+  full_frame_every: 40
   every_nth_frame: 1
-  min_frame_interval: 50
-  jpeg_quality: 60
+  # 75ms (~13fps) reduces WiFi pressure vs 50ms (20fps), smoother in practice
+  min_frame_interval: 75
+  # Higher quality reduces compression artifacts at modest bandwidth cost
+  jpeg_quality: 75
   max_bytes_per_msg: 524288
   big_endian: false
 
+
+# ==============================================================================
+# Periodic GSL3680 reset
+# The touch controller can drift into a ghost-touch state after long uptime.
+# Cycling power every 6 hours clears accumulated noise without user intervention.
+# ==============================================================================
+interval:
+  - interval: 6h
+    then:
+      - switch.turn_off: display_power
+      - delay: 1000ms
+      - switch.turn_on: display_power
 
 # ==============================================================================
 # Utility buttons / sensors
