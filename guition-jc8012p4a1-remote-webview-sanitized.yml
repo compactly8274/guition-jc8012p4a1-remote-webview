@@ -177,7 +177,9 @@ i2c:
     sda: GPIO7
     scl: GPIO8
     scan: false
-    frequency: 400kHz
+    # Reduced from 400kHz — lower frequency reduces noise-induced read errors
+    # that can trigger spurious touch events on the GSL3680.
+    frequency: 100kHz
 
 # ==============================================================================
 # Touchscreen — GSL3680
@@ -186,13 +188,13 @@ i2c:
 # rendered content 90° so it fills the screen in landscape. Touch coordinates
 # from the GSL3680 are in raw portrait space and must be transformed to match.
 #
-# For rotation: 90 (landscape, USB on left side):
-#   swap_xy: true   — swaps X and Y axes to match the rotated orientation
-#   mirror_x: true  — mirrors X to correct left/right after swap
-#   mirror_y: false — no Y mirror needed for 90° CCW rotation
+# Empirically verified transform for this panel with rotation: 90:
+#   swap_xy: false  — axes do NOT need swapping on this panel revision
+#   mirror_x: true  — mirrors X axis to correct left/right alignment
+#   mirror_y: false — no Y mirror needed
 #
-# If touches are still off after flashing, try toggling mirror_x or mirror_y
-# one at a time — the exact values can vary by panel revision.
+# Do not change swap_xy based on the theoretical 90° rotation formula —
+# the GSL3680 firmware on this panel handles axis mapping internally.
 # ==============================================================================
 touchscreen:
   - platform: gsl3680
@@ -200,7 +202,7 @@ touchscreen:
     reset_pin: GPIO22
     interrupt_pin: GPIO21
     transform:
-      swap_xy: true
+      swap_xy: false
       mirror_x: true
       mirror_y: false
     on_touch:
