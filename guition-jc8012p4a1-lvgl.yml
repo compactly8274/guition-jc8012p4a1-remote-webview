@@ -240,6 +240,14 @@ sensor:
     id: weather_pressure_out
     entity_id: weather.pirateweather
     attribute: pressure
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: lbl_weather_pressure
+            text: !lambda |-
+              static char buf[16];
+              snprintf(buf, sizeof(buf), "%.0f hPa", x);
+              return buf;
 
   # --- Indoor sensors (Aqara) ---
   - platform: homeassistant
@@ -391,6 +399,18 @@ text_sensor:
         - lvgl.label.update:
             id: lbl_moon
             text: !lambda 'return ("Moon: " + x).c_str();'
+
+  # --- 7-day forecast summary ---
+  # Requires a template sensor in HA — see ha-pirateweather-forecast-template.yaml
+  # in this repo for the configuration to add to your HA configuration.yaml.
+  - platform: homeassistant
+    id: forecast_summary
+    entity_id: sensor.pirateweather_forecast_summary
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: lbl_forecast
+            text: !lambda 'return x.c_str();'
 
   # --- Honeywell HVAC state ---
   - platform: homeassistant
@@ -653,7 +673,7 @@ lvgl:
             layout:
               type: flex
               flex_flow: column
-              pad_row: 14
+              pad_row: 10
             widgets:
               - label:
                   text: "Current Weather"
@@ -661,13 +681,44 @@ lvgl:
                   text_font: montserrat_16
                   width: 100%
 
-              - label:
-                  id: lbl_weather_temp
-                  text: "--°F"
-                  text_color: 0xffffff
-                  text_font: montserrat_48
-                  text_align: center
+              # Temp + pressure on the same row
+              - obj:
                   width: 100%
+                  height: 58
+                  bg_opa: transparent
+                  border_width: 0
+                  layout:
+                    type: flex
+                    flex_flow: row
+                    flex_align_main: space_between
+                    flex_align_cross: center
+                  widgets:
+                    - label:
+                        id: lbl_weather_temp
+                        text: "--°F"
+                        text_color: 0xffffff
+                        text_font: montserrat_48
+                    - obj:
+                        width: 160
+                        height: 58
+                        bg_opa: transparent
+                        border_width: 0
+                        layout:
+                          type: flex
+                          flex_flow: column
+                          flex_align_cross: end
+                          flex_align_main: center
+                          pad_row: 2
+                        widgets:
+                          - label:
+                              text: "Pressure"
+                              text_color: 0x555577
+                              text_font: montserrat_14
+                          - label:
+                              id: lbl_weather_pressure
+                              text: "-- hPa"
+                              text_color: 0x9999ff
+                              text_font: montserrat_22
 
               - label:
                   id: lbl_weather_condition
@@ -686,10 +737,33 @@ lvgl:
                   pad_all: 0
 
               - label:
+                  text: "7-Day Forecast"
+                  text_color: 0x555577
+                  text_font: montserrat_14
+                  width: 100%
+
+              # Forecast lines — populated from sensor.pirateweather_forecast_summary
+              - label:
+                  id: lbl_forecast
+                  text: "Loading..."
+                  text_color: 0xccccee
+                  text_font: montserrat_16
+                  width: 100%
+                  long_mode: wrap
+
+              # Divider
+              - obj:
+                  width: 100%
+                  height: 2
+                  bg_color: 0x2a2a4a
+                  border_width: 0
+                  pad_all: 0
+
+              - label:
                   id: lbl_moon
                   text: "Moon: ---"
                   text_color: 0x9999bb
-                  text_font: montserrat_22
+                  text_font: montserrat_20
                   width: 100%
 
         # Vertical divider
