@@ -99,8 +99,9 @@ captive_portal:
 # HA / OTA / Logging
 # ==============================================================================
 api:
+  reboot_timeout: 15min
   encryption:
-    key: "{your encryption password}"
+    key: !secret api_encryption_key
 
 ota:
   - platform: esphome
@@ -153,7 +154,7 @@ display:
     id: my_display
     update_interval: never
     reset_pin: GPIO27
-    auto_clear_enabled: false
+    auto_clear_enabled: true
 
 output:
   - platform: ledc
