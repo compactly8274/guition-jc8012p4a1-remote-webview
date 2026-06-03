@@ -528,25 +528,33 @@ lvgl:
   log_level: WARN
   rotation: 90       # Software rotation: physical 800×1280 → logical 1280×800
 
-  # Color scheme: dark graphite to match "Graphite Auto" HA theme
-  bg_color: 0x1e1e1e
-  bg_opa: 100%
-
-  theme:
-    button:
+  # style_definitions used to stamp dark-grey appearance on all buttons,
+  # replacing the theme: block that allowed the default LVGL theme to win.
+  style_definitions:
+    - id: style_btn_default
       bg_color: 0x2a2a2a
-      bg_opa: 100%
+      bg_opa: 1
       text_color: 0xffffff
       border_color: 0x404040
       border_width: 1
       radius: 10
-      pressed:
-        bg_color: 0x383838
-        bg_opa: 100%
+    - id: style_btn_round
+      bg_color: 0x303030
+      bg_opa: 1
+      text_color: 0xffffff
+      border_color: 0x404040
+      border_width: 1
+    - id: style_tab_active
+      bg_color: 0x1a3a6a
+      bg_opa: 1
+      border_width: 0
+      radius: 0
+    - id: style_tab_inactive
+      bg_color: 0x0a0a0a
+      bg_opa: 1
+      border_width: 0
+      radius: 0
 
-  # --------------------------------------------------------------------------
-  # Top layer — always visible above both pages
-  # --------------------------------------------------------------------------
   top_layer:
     widgets:
       # Status bar
@@ -556,7 +564,7 @@ lvgl:
           width: 1280
           height: 44
           bg_color: 0x0a0a0a
-          bg_opa: 100%
+          bg_opa: 1
           border_width: 0
           radius: 0
           pad_left: 16
@@ -584,7 +592,7 @@ lvgl:
           width: 1280
           height: 42
           bg_color: 0x0a0a0a
-          bg_opa: 100%
+          bg_opa: 1
           border_width: 0
           radius: 0
           pad_all: 0
@@ -596,8 +604,7 @@ lvgl:
                 id: tab_btn_weather
                 width: 640
                 height: 42
-                bg_color: 0x1a3a6a
-                bg_opa: 100%
+                styles: style_tab_active
                 border_width: 0
                 radius: 0
                 widgets:
@@ -613,8 +620,7 @@ lvgl:
                 id: tab_btn_env
                 width: 640
                 height: 42
-                bg_color: 0x0a0a0a
-                bg_opa: 100%
+                styles: style_tab_inactive
                 border_width: 0
                 radius: 0
                 widgets:
@@ -629,14 +635,14 @@ lvgl:
                   - lvgl.widget.update:
                       id: tab_btn_weather
                       bg_color: 0x0a0a0a
-                      bg_opa: 100%
+                      bg_opa: 1
                   - lvgl.label.update:
                       id: tab_lbl_weather
                       text_color: 0x666666
                   - lvgl.widget.update:
                       id: tab_btn_env
                       bg_color: 0x1a3a6a
-                      bg_opa: 100%
+                      bg_opa: 1
                   - lvgl.label.update:
                       id: tab_lbl_env
                       text_color: 0x2979ff
@@ -653,19 +659,19 @@ lvgl:
     # =========================================================================
     - id: page_weather
       bg_color: 0x1e1e1e
-      bg_opa: 100%
+      bg_opa: 1
       on_load:
         - lvgl.widget.update:
             id: tab_btn_weather
             bg_color: 0x1a3a6a
-            bg_opa: 100%
+            bg_opa: 1
         - lvgl.label.update:
             id: tab_lbl_weather
             text_color: 0x2979ff
         - lvgl.widget.update:
             id: tab_btn_env
             bg_color: 0x0a0a0a
-            bg_opa: 100%
+            bg_opa: 1
         - lvgl.label.update:
             id: tab_lbl_env
             text_color: 0x666666
@@ -677,7 +683,7 @@ lvgl:
             width: 630
             height: 714
             bg_color: 0x141414
-            bg_opa: 100%
+            bg_opa: 1
             border_width: 0
             pad_top: 28
             pad_left: 28
@@ -707,7 +713,7 @@ lvgl:
               - obj:
                   width: 574
                   height: 30
-                  bg_opa: 0%
+                  bg_opa: 0
                   border_width: 0
                   layout:
                     type: flex
@@ -738,7 +744,7 @@ lvgl:
                   width: 100%
                   height: 2
                   bg_color: 0x383838
-                  bg_opa: 100%
+                  bg_opa: 1
                   border_width: 0
                   pad_all: 0
 
@@ -762,7 +768,7 @@ lvgl:
                   width: 100%
                   height: 2
                   bg_color: 0x383838
-                  bg_opa: 100%
+                  bg_opa: 1
                   border_width: 0
                   pad_all: 0
 
@@ -780,7 +786,7 @@ lvgl:
             width: 2
             height: 714
             bg_color: 0x383838
-            bg_opa: 100%
+            bg_opa: 1
             border_width: 0
 
         # Right column — Honeywell Thermostat
@@ -790,7 +796,7 @@ lvgl:
             width: 648
             height: 714
             bg_color: 0x141414
-            bg_opa: 100%
+            bg_opa: 1
             border_width: 0
             pad_top: 28
             pad_left: 32
@@ -839,7 +845,7 @@ lvgl:
                   width: 100%
                   height: 2
                   bg_color: 0x383838
-                  bg_opa: 100%
+                  bg_opa: 1
                   border_width: 0
                   pad_all: 0
 
@@ -854,7 +860,7 @@ lvgl:
               - obj:
                   width: 100%
                   height: 90
-                  bg_opa: 0%
+                  bg_opa: 0
                   border_width: 0
                   layout:
                     type: flex
@@ -867,7 +873,7 @@ lvgl:
                         width: 90
                         height: 90
                         bg_color: 0x2a2a2a
-                        bg_opa: 100%
+                        bg_opa: 1
                         border_color: 0x404040
                         border_width: 1
                         radius: 45
@@ -898,7 +904,7 @@ lvgl:
                         width: 90
                         height: 90
                         bg_color: 0x2a2a2a
-                        bg_opa: 100%
+                        bg_opa: 1
                         border_color: 0x404040
                         border_width: 1
                         radius: 45
@@ -926,19 +932,19 @@ lvgl:
     # =========================================================================
     - id: page_env
       bg_color: 0x1e1e1e
-      bg_opa: 100%
+      bg_opa: 1
       on_load:
         - lvgl.widget.update:
             id: tab_btn_env
             bg_color: 0x1a3a6a
-            bg_opa: 100%
+            bg_opa: 1
         - lvgl.label.update:
             id: tab_lbl_env
             text_color: 0x2979ff
         - lvgl.widget.update:
             id: tab_btn_weather
             bg_color: 0x0a0a0a
-            bg_opa: 100%
+            bg_opa: 1
         - lvgl.label.update:
             id: tab_lbl_weather
             text_color: 0x666666
@@ -949,7 +955,7 @@ lvgl:
             y: 44
             width: 1280
             height: 714
-            bg_opa: 0%
+            bg_opa: 0
             border_width: 0
             pad_top: 14
             pad_left: 14
@@ -967,7 +973,7 @@ lvgl:
               - obj:
                   width: 1252
                   height: 155
-                  bg_opa: 0%
+                  bg_opa: 0
                   border_width: 0
                   layout:
                     type: flex
@@ -980,7 +986,7 @@ lvgl:
                         width: 410
                         height: 155
                         bg_color: 0x2a2a2a
-                        bg_opa: 100%
+                        bg_opa: 1
                         border_color: 0x404040
                         border_width: 1
                         radius: 12
@@ -1007,7 +1013,7 @@ lvgl:
                         width: 410
                         height: 155
                         bg_color: 0x2a2a2a
-                        bg_opa: 100%
+                        bg_opa: 1
                         border_color: 0x404040
                         border_width: 1
                         radius: 12
@@ -1034,7 +1040,7 @@ lvgl:
                         width: 432
                         height: 155
                         bg_color: 0x2a2a2a
-                        bg_opa: 100%
+                        bg_opa: 1
                         border_color: 0x404040
                         border_width: 1
                         radius: 12
@@ -1062,7 +1068,7 @@ lvgl:
               - obj:
                   width: 1252
                   height: 135
-                  bg_opa: 0%
+                  bg_opa: 0
                   border_width: 0
                   layout:
                     type: flex
@@ -1076,7 +1082,7 @@ lvgl:
                         width: 410
                         height: 135
                         bg_color: 0x2a2a2a
-                        bg_opa: 100%
+                        bg_opa: 1
                         border_color: 0x404040
                         border_width: 1
                         radius: 12
@@ -1107,7 +1113,7 @@ lvgl:
                         width: 410
                         height: 135
                         bg_color: 0x2a2a2a
-                        bg_opa: 100%
+                        bg_opa: 1
                         border_color: 0x404040
                         border_width: 1
                         radius: 12
@@ -1135,7 +1141,7 @@ lvgl:
                         width: 432
                         height: 135
                         bg_color: 0x2a2a2a
-                        bg_opa: 100%
+                        bg_opa: 1
                         border_color: 0x404040
                         border_width: 1
                         radius: 12
@@ -1168,7 +1174,7 @@ lvgl:
                   width: 1252
                   height: 196
                   bg_color: 0x2a2a2a
-                  bg_opa: 100%
+                  bg_opa: 1
                   border_color: 0x404040
                   border_width: 1
                   radius: 12
@@ -1187,7 +1193,7 @@ lvgl:
                     - obj:
                         width: 500
                         height: 156
-                        bg_opa: 0%
+                        bg_opa: 0
                         border_width: 0
                         layout:
                           type: flex
@@ -1214,14 +1220,14 @@ lvgl:
                     - obj:
                         width: 340
                         height: 10
-                        bg_opa: 0%
+                        bg_opa: 0
                         border_width: 0
 
                     # Right: setpoint [−] value [+]
                     - obj:
                         width: 412
                         height: 156
-                        bg_opa: 0%
+                        bg_opa: 0
                         border_width: 0
                         layout:
                           type: flex
@@ -1233,9 +1239,7 @@ lvgl:
                           - button:
                               width: 80
                               height: 80
-                              bg_color: 0x303030
-                              bg_opa: 100%
-                              border_color: 0x404040
+                              styles: style_btn_round
                               border_width: 1
                               radius: 40
                               widgets:
@@ -1264,9 +1268,7 @@ lvgl:
                           - button:
                               width: 80
                               height: 80
-                              bg_color: 0x303030
-                              bg_opa: 100%
-                              border_color: 0x404040
+                              styles: style_btn_round
                               border_width: 1
                               radius: 40
                               widgets:
