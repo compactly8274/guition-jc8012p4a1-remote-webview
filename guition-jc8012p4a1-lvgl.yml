@@ -569,6 +569,9 @@ lvgl:
     - my_touchscreen
   log_level: WARN
   rotation: 90
+  # Global screen background — must be set here to override LVGL's default purple theme
+  bg_color: 0x111111
+  bg_opa: 1
 
   style_definitions:
     # Dark card — rounded panel with subtle border
