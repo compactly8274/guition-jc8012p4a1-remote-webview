@@ -232,6 +232,10 @@ sensor:
             static char buf[12];
             snprintf(buf, sizeof(buf), "%.1f °C", x);
             return buf;
+      - lambda: |-
+          lv_chart_set_next_value(id(chart_temperature),
+            lv_chart_get_series_next(id(chart_temperature), NULL),
+            (int16_t)(x * 10.0f));
 
   - platform: homeassistant
     id: indoor_humidity
@@ -243,6 +247,10 @@ sensor:
             static char buf[10];
             snprintf(buf, sizeof(buf), "%.1f%%", x);
             return buf;
+      - lambda: |-
+          lv_chart_set_next_value(id(chart_humidity),
+            lv_chart_get_series_next(id(chart_humidity), NULL),
+            (int16_t)(x * 10.0f));
 
   - platform: homeassistant
     id: indoor_pressure
@@ -254,6 +262,10 @@ sensor:
             static char buf[14];
             snprintf(buf, sizeof(buf), "%.0f hPa", x);
             return buf;
+      - lambda: |-
+          lv_chart_set_next_value(id(chart_pressure),
+            lv_chart_get_series_next(id(chart_pressure), NULL),
+            (int16_t)(x));
 
   # Zone thermostat (Air Conditioner)
   - platform: homeassistant
@@ -474,34 +486,6 @@ interval:
       - delay: 1000ms
       - switch.turn_on: display_power
 
-  # Push sensor readings into charts every 2 minutes
-  # Charts y-axes are scaled: temp and humidity × 10 to get integer resolution
-  - interval: 2min
-    then:
-      - if:
-          condition:
-            lambda: 'return !isnan(id(indoor_pressure).state);'
-          then:
-            - lvgl.chart.push_point:
-                id: chart_pressure
-                series_id: series_pressure
-                y: !lambda 'return (int)(id(indoor_pressure).state);'
-      - if:
-          condition:
-            lambda: 'return !isnan(id(indoor_temp).state);'
-          then:
-            - lvgl.chart.push_point:
-                id: chart_temperature
-                series_id: series_temperature
-                y: !lambda 'return (int)(id(indoor_temp).state * 10.0f);'
-      - if:
-          condition:
-            lambda: 'return !isnan(id(indoor_humidity).state);'
-          then:
-            - lvgl.chart.push_point:
-                id: chart_humidity
-                series_id: series_humidity
-                y: !lambda 'return (int)(id(indoor_humidity).state * 10.0f);'
 
 # ==============================================================================
 # Buttons / switches
