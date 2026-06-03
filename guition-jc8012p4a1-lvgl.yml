@@ -232,10 +232,21 @@ sensor:
             static char buf[12];
             snprintf(buf, sizeof(buf), "%.1f °C", x);
             return buf;
-      - lambda: |-
-          lv_chart_set_next_value(id(chart_temperature),
-            lv_chart_get_series_next(id(chart_temperature), NULL),
-            (int16_t)(x * 10.0f));
+      - lvgl.label.update:
+          id: lbl_temp_big
+          text: !lambda |-
+            static char buf[12];
+            snprintf(buf, sizeof(buf), "%.1f °C", x);
+            return buf;
+      - lvgl.label.update:
+          id: lbl_temp_range
+          text: !lambda |-
+            static float mn = NAN, mx = NAN;
+            if (isnan(mn) || x < mn) mn = x;
+            if (isnan(mx) || x > mx) mx = x;
+            static char buf[28];
+            snprintf(buf, sizeof(buf), "%.1f \xe2\x80\x93 %.1f \xc2\xb0C", mn, mx);
+            return buf;
 
   - platform: homeassistant
     id: indoor_humidity
@@ -247,10 +258,21 @@ sensor:
             static char buf[10];
             snprintf(buf, sizeof(buf), "%.1f%%", x);
             return buf;
-      - lambda: |-
-          lv_chart_set_next_value(id(chart_humidity),
-            lv_chart_get_series_next(id(chart_humidity), NULL),
-            (int16_t)(x * 10.0f));
+      - lvgl.label.update:
+          id: lbl_humidity_big
+          text: !lambda |-
+            static char buf[10];
+            snprintf(buf, sizeof(buf), "%.1f%%", x);
+            return buf;
+      - lvgl.label.update:
+          id: lbl_humidity_range
+          text: !lambda |-
+            static float mn = NAN, mx = NAN;
+            if (isnan(mn) || x < mn) mn = x;
+            if (isnan(mx) || x > mx) mx = x;
+            static char buf[20];
+            snprintf(buf, sizeof(buf), "%.1f%% \xe2\x80\x93 %.1f%%", mn, mx);
+            return buf;
 
   - platform: homeassistant
     id: indoor_pressure
@@ -262,10 +284,21 @@ sensor:
             static char buf[14];
             snprintf(buf, sizeof(buf), "%.0f hPa", x);
             return buf;
-      - lambda: |-
-          lv_chart_set_next_value(id(chart_pressure),
-            lv_chart_get_series_next(id(chart_pressure), NULL),
-            (int16_t)(x));
+      - lvgl.label.update:
+          id: lbl_pressure_big
+          text: !lambda |-
+            static char buf[14];
+            snprintf(buf, sizeof(buf), "%.0f hPa", x);
+            return buf;
+      - lvgl.label.update:
+          id: lbl_pressure_range
+          text: !lambda |-
+            static float mn = NAN, mx = NAN;
+            if (isnan(mn) || x < mn) mn = x;
+            if (isnan(mx) || x > mx) mx = x;
+            static char buf[24];
+            snprintf(buf, sizeof(buf), "%.0f \xe2\x80\x93 %.0f hPa", mn, mx);
+            return buf;
 
   # Zone thermostat (Air Conditioner)
   - platform: homeassistant
@@ -961,7 +994,7 @@ lvgl:
                               text_color: 0xffffff
                               text_font: montserrat_18
 
-              # ---- INDOOR PRESSURE CHART ----
+              # ---- INDOOR PRESSURE ----
               - obj:
                   x: 0
                   y: 86
@@ -985,30 +1018,39 @@ lvgl:
                         text_color: 0xffffff
                         text_font: montserrat_16
                     - label:
-                        x: 310
-                        y: 2
-                        text: "hPa"
-                        text_color: 0x888888
-                        text_font: montserrat_12
-                    - chart:
-                        id: chart_pressure
+                        id: lbl_pressure_big
                         x: 0
                         y: 28
                         width: 394
-                        height: 145
-                        bg_color: 0x1e1e1e
-                        bg_opa: 1
-                        border_width: 0
-                        chart_type: line
-                        point_count: 60
-                        y_start: 990
-                        y_end: 1040
-                        series:
-                          - id: series_pressure
-                            color: 0xe07000
-                            width: 2
+                        text: "--- hPa"
+                        text_color: 0xe07000
+                        text_font: montserrat_40
+                        text_align: center
+                    - label:
+                        x: 0
+                        y: 94
+                        text: "Session range:"
+                        text_color: 0x666666
+                        text_font: montserrat_12
+                    - label:
+                        id: lbl_pressure_range
+                        x: 0
+                        y: 112
+                        width: 394
+                        text: "---"
+                        text_color: 0x888888
+                        text_font: montserrat_14
+                        text_align: center
+                    - label:
+                        x: 0
+                        y: 148
+                        width: 394
+                        text: "Since last reboot"
+                        text_color: 0x444444
+                        text_font: montserrat_10
+                        text_align: center
 
-              # ---- INDOOR TEMPERATURE CHART ----
+              # ---- INDOOR TEMPERATURE ----
               - obj:
                   x: 0
                   y: 299
@@ -1032,31 +1074,39 @@ lvgl:
                         text_color: 0xffffff
                         text_font: montserrat_16
                     - label:
-                        x: 310
-                        y: 2
-                        text: "°C"
-                        text_color: 0x888888
-                        text_font: montserrat_12
-                    - chart:
-                        id: chart_temperature
+                        id: lbl_temp_big
                         x: 0
                         y: 28
                         width: 394
-                        height: 145
-                        bg_color: 0x1e1e1e
-                        bg_opa: 1
-                        border_width: 0
-                        chart_type: line
-                        point_count: 60
-                        # y_start/y_end scaled ×10 to match integer push values
-                        y_start: 150
-                        y_end: 350
-                        series:
-                          - id: series_temperature
-                            color: 0xe07000
-                            width: 2
+                        text: "--.- °C"
+                        text_color: 0xe07000
+                        text_font: montserrat_40
+                        text_align: center
+                    - label:
+                        x: 0
+                        y: 94
+                        text: "Session range:"
+                        text_color: 0x666666
+                        text_font: montserrat_12
+                    - label:
+                        id: lbl_temp_range
+                        x: 0
+                        y: 112
+                        width: 394
+                        text: "---"
+                        text_color: 0x888888
+                        text_font: montserrat_14
+                        text_align: center
+                    - label:
+                        x: 0
+                        y: 148
+                        width: 394
+                        text: "Since last reboot"
+                        text_color: 0x444444
+                        text_font: montserrat_10
+                        text_align: center
 
-              # ---- INDOOR HUMIDITY CHART ----
+              # ---- INDOOR HUMIDITY ----
               - obj:
                   x: 0
                   y: 512
@@ -1080,29 +1130,29 @@ lvgl:
                         text_color: 0xffffff
                         text_font: montserrat_16
                     - label:
-                        x: 310
-                        y: 2
-                        text: "%"
-                        text_color: 0x888888
-                        text_font: montserrat_12
-                    - chart:
-                        id: chart_humidity
+                        id: lbl_humidity_big
                         x: 0
                         y: 28
                         width: 394
-                        height: 125
-                        bg_color: 0x1e1e1e
-                        bg_opa: 1
-                        border_width: 0
-                        chart_type: line
-                        point_count: 60
-                        # y_start/y_end scaled ×10
-                        y_start: 200
-                        y_end: 800
-                        series:
-                          - id: series_humidity
-                            color: 0xe07000
-                            width: 2
+                        text: "--.--%"
+                        text_color: 0xe07000
+                        text_font: montserrat_40
+                        text_align: center
+                    - label:
+                        x: 0
+                        y: 94
+                        text: "Session range:"
+                        text_color: 0x666666
+                        text_font: montserrat_12
+                    - label:
+                        id: lbl_humidity_range
+                        x: 0
+                        y: 112
+                        width: 394
+                        text: "---"
+                        text_color: 0x888888
+                        text_font: montserrat_14
+                        text_align: center
 
         # ==============================================================
         # COLUMN 3 — Controls  (x=858, w=414, y=48)
