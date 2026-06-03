@@ -532,7 +532,7 @@ lvgl:
   bg_color: 0x1a1a2e
 
   theme:
-    btn:
+    button:
       bg_color: 0x2d2d44
       text_color: 0xffffff
       border_color: 0x4a4a6a
@@ -685,7 +685,7 @@ lvgl:
               - obj:
                   width: 100%
                   height: 58
-                  bg_opa: transparent
+                  bg_opa: 0
                   border_width: 0
                   layout:
                     type: flex
@@ -701,7 +701,7 @@ lvgl:
                     - obj:
                         width: 160
                         height: 58
-                        bg_opa: transparent
+                        bg_opa: 0
                         border_width: 0
                         layout:
                           type: flex
@@ -813,7 +813,7 @@ lvgl:
               - obj:
                   width: 100%
                   height: 30
-                  bg_opa: transparent
+                  bg_opa: 0
                   border_width: 0
                   layout:
                     type: flex
@@ -850,7 +850,7 @@ lvgl:
               - obj:
                   width: 100%
                   height: 90
-                  bg_opa: transparent
+                  bg_opa: 0
                   border_width: 0
                   layout:
                     type: flex
@@ -940,7 +940,7 @@ lvgl:
             y: 44
             width: 1280
             height: 714
-            bg_opa: transparent
+            bg_opa: 0
             border_width: 0
             pad_top: 14
             pad_left: 14
@@ -958,7 +958,7 @@ lvgl:
               - obj:
                   width: 1252
                   height: 155
-                  bg_opa: transparent
+                  bg_opa: 0
                   border_width: 0
                   layout:
                     type: flex
@@ -1050,7 +1050,7 @@ lvgl:
               - obj:
                   width: 1252
                   height: 135
-                  bg_opa: transparent
+                  bg_opa: 0
                   border_width: 0
                   layout:
                     type: flex
@@ -1171,7 +1171,7 @@ lvgl:
                     - obj:
                         width: 500
                         height: 156
-                        bg_opa: transparent
+                        bg_opa: 0
                         border_width: 0
                         layout:
                           type: flex
@@ -1198,14 +1198,14 @@ lvgl:
                     - obj:
                         width: 340
                         height: 10
-                        bg_opa: transparent
+                        bg_opa: 0
                         border_width: 0
 
                     # Right: setpoint [−] value [+]
                     - obj:
                         width: 412
                         height: 156
-                        bg_opa: transparent
+                        bg_opa: 0
                         border_width: 0
                         layout:
                           type: flex
