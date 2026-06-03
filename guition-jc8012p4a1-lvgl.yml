@@ -9,26 +9,15 @@
 #   Touch    : GSL3680 capacitive (I2C)
 #   Backlight: GPIO23 via LEDC
 #
-# DASHBOARD - mirrors the "ESP-P4" HA view:
-#   Tab 1 — Weather & Thermostat
-#     • PirateWeather current conditions + moon phase
-#     • Honeywell Home thermostat — view current temp, adjust setpoint
-#   Tab 2 — Environment & Controls
-#     • Indoor temp / humidity / pressure (Aqara Cube T1 Pro)
-#     • Office WiZ light toggle
-#     • PM2.5 air quality (Cyclo UV 310)
-#     • Zone thermostat (climate.30786325755351_climate) with setpoint control
-#     • Humidifier toggle
+# LAYOUT — mirrors the "ESP-P4" HA view, single screen, no tabs:
+#   Col 1 (left,  ~420px) : PirateWeather current + 7-day forecast, Sun, Moon
+#   Col 2 (mid,   ~420px) : Indoor temp/humidity/pressure tiles + history charts
+#   Col 3 (right, ~420px) : Office light, PM2.5, AC thermostat, Dehumidifier
 #
-# NOT REPLICATED (requires a browser / chart engine not available in LVGL):
-#   • statistics-graph cards (pressure/temp/humidity history)
-#   • history-graph card (sun rise/set)
+# CHARTS: built from sensor data pushed every 2 min since last boot.
+#         Charts start empty and fill over time (no HA history access in LVGL).
 #
-# TOUCH CALIBRATION NOTE:
-#   The existing transform (swap_xy: false, mirror_x: true) was verified
-#   against the remote_webview rotation. With LVGL's own software rotation
-#   the mapping may differ. If touches are mis-aligned after flashing, try
-#   toggling swap_xy or mirror_x one at a time.
+# TEMPERATURE UNITS: Celsius throughout (matching the HA dashboard).
 # ==============================================================================
 
 substitutions:
@@ -46,7 +35,6 @@ esphome:
   on_boot:
     priority: 600
     then:
-      # Hard-reset GSL3680 at boot to clear stale touch state / ghost touches
       - switch.turn_off: display_power
       - delay: 1000ms
       - switch.turn_on: display_power
@@ -75,16 +63,13 @@ esp_ldo:
   - channel: 3
     voltage: 2.5V
 
-# ==============================================================================
-# External components — only the GSL3680 driver needed (no remote_webview)
-# ==============================================================================
 external_components:
   - source: github://kvj/esphome@jd9365_gsl3680
     refresh: 1d
     components: [gsl3680]
 
 # ==============================================================================
-# WiFi / connectivity (via ESP32-C6 coprocessor + esp32_hosted)
+# WiFi / connectivity
 # ==============================================================================
 esp32_hosted:
   variant: ESP32C6
@@ -111,7 +96,7 @@ wifi:
 captive_portal:
 
 # ==============================================================================
-# Home Assistant / OTA / Logging
+# HA / OTA / Logging
 # ==============================================================================
 api:
   encryption:
@@ -132,7 +117,7 @@ preferences:
   flash_write_interval: 5min
 
 # ==============================================================================
-# Time — drives the clock widget, synced from Home Assistant
+# Time
 # ==============================================================================
 time:
   - platform: homeassistant
@@ -160,8 +145,7 @@ time:
                 return buf;
 
 # ==============================================================================
-# Display — MIPI DSI 800x1280 physical, landscape via LVGL rotation
-# Do NOT set rotation here; LVGL handles it to keep touch coords consistent.
+# Display
 # ==============================================================================
 display:
   - platform: mipi_dsi
@@ -171,9 +155,6 @@ display:
     reset_pin: GPIO27
     auto_clear_enabled: false
 
-# ==============================================================================
-# Backlight
-# ==============================================================================
 output:
   - platform: ledc
     pin: GPIO23
@@ -190,21 +171,15 @@ light:
     restore_mode: RESTORE_DEFAULT_ON
 
 # ==============================================================================
-# I2C (touchscreen)
+# I2C + Touchscreen
 # ==============================================================================
 i2c:
   - id: i2c_bus
     sda: GPIO7
     scl: GPIO8
     scan: false
-    # 100kHz is more noise-tolerant than 400kHz, reduces spurious touch reads
     frequency: 100kHz
 
-# ==============================================================================
-# Touchscreen — GSL3680
-# Empirically verified: swap_xy false, mirror_x true for this panel.
-# See TOUCH CALIBRATION NOTE at top if touches are misaligned after flashing.
-# ==============================================================================
 touchscreen:
   - platform: gsl3680
     id: my_touchscreen
@@ -220,140 +195,162 @@ touchscreen:
 # ==============================================================================
 # Home Assistant entity subscriptions
 # ==============================================================================
-
 sensor:
-  # --- Weather ---
+  # Outdoor weather
   - platform: homeassistant
     id: weather_temp_out
     entity_id: weather.pirateweather
     attribute: temperature
     on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_weather_temp
-            text: !lambda |-
-              static char buf[12];
-              snprintf(buf, sizeof(buf), "%.0f°F", x);
-              return buf;
+      - lvgl.label.update:
+          id: lbl_weather_temp
+          text: !lambda |-
+            static char buf[12];
+            snprintf(buf, sizeof(buf), "%.1f °C", x);
+            return buf;
 
   - platform: homeassistant
     id: weather_pressure_out
     entity_id: weather.pirateweather
     attribute: pressure
     on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_weather_pressure
-            text: !lambda |-
-              static char buf[16];
-              snprintf(buf, sizeof(buf), "%.0f hPa", x);
-              return buf;
+      - lvgl.label.update:
+          id: lbl_weather_pressure
+          text: !lambda |-
+            static char buf[16];
+            snprintf(buf, sizeof(buf), "%.2f hPa", x);
+            return buf;
 
-  # --- Indoor sensors (Aqara) ---
+  # Indoor sensors (Aqara)
   - platform: homeassistant
     id: indoor_temp
     entity_id: sensor.lumi_lumi_weather_temperature
     on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_indoor_temp
-            text: !lambda |-
-              static char buf[12];
-              snprintf(buf, sizeof(buf), "%.1f°F", x);
-              return buf;
+      - lvgl.label.update:
+          id: lbl_indoor_temp
+          text: !lambda |-
+            static char buf[12];
+            snprintf(buf, sizeof(buf), "%.1f °C", x);
+            return buf;
+      - lvgl.label.update:
+          id: lbl_temp_big
+          text: !lambda |-
+            static char buf[12];
+            snprintf(buf, sizeof(buf), "%.1f °C", x);
+            return buf;
+      - lvgl.label.update:
+          id: lbl_temp_range
+          text: !lambda |-
+            static float mn = NAN, mx = NAN;
+            if (isnan(mn) || x < mn) mn = x;
+            if (isnan(mx) || x > mx) mx = x;
+            static char buf[28];
+            snprintf(buf, sizeof(buf), "%.1f \xe2\x80\x93 %.1f \xc2\xb0C", mn, mx);
+            return buf;
 
   - platform: homeassistant
     id: indoor_humidity
     entity_id: sensor.lumi_lumi_weather_humidity
     on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_indoor_humidity
-            text: !lambda |-
-              static char buf[8];
-              snprintf(buf, sizeof(buf), "%.0f%%", x);
-              return buf;
+      - lvgl.label.update:
+          id: lbl_indoor_humidity
+          text: !lambda |-
+            static char buf[10];
+            snprintf(buf, sizeof(buf), "%.1f%%", x);
+            return buf;
+      - lvgl.label.update:
+          id: lbl_humidity_big
+          text: !lambda |-
+            static char buf[10];
+            snprintf(buf, sizeof(buf), "%.1f%%", x);
+            return buf;
+      - lvgl.label.update:
+          id: lbl_humidity_range
+          text: !lambda |-
+            static float mn = NAN, mx = NAN;
+            if (isnan(mn) || x < mn) mn = x;
+            if (isnan(mx) || x > mx) mx = x;
+            static char buf[20];
+            snprintf(buf, sizeof(buf), "%.1f%% \xe2\x80\x93 %.1f%%", mn, mx);
+            return buf;
 
   - platform: homeassistant
     id: indoor_pressure
     entity_id: sensor.lumi_lumi_weather_pressure
     on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_indoor_pressure
-            text: !lambda |-
-              static char buf[14];
-              snprintf(buf, sizeof(buf), "%.0f hPa", x);
-              return buf;
+      - lvgl.label.update:
+          id: lbl_indoor_pressure
+          text: !lambda |-
+            static char buf[14];
+            snprintf(buf, sizeof(buf), "%.0f hPa", x);
+            return buf;
+      - lvgl.label.update:
+          id: lbl_pressure_big
+          text: !lambda |-
+            static char buf[14];
+            snprintf(buf, sizeof(buf), "%.0f hPa", x);
+            return buf;
+      - lvgl.label.update:
+          id: lbl_pressure_range
+          text: !lambda |-
+            static float mn = NAN, mx = NAN;
+            if (isnan(mn) || x < mn) mn = x;
+            if (isnan(mx) || x > mx) mx = x;
+            static char buf[24];
+            snprintf(buf, sizeof(buf), "%.0f \xe2\x80\x93 %.0f hPa", mn, mx);
+            return buf;
 
-  # --- Honeywell thermostat ---
-  - platform: homeassistant
-    id: honeywell_current
-    entity_id: climate.honeywell_home_thermostat
-    attribute: current_temperature
-    on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_hw_current
-            text: !lambda |-
-              static char buf[12];
-              snprintf(buf, sizeof(buf), "%.1f°F", x);
-              return buf;
-
-  - platform: homeassistant
-    id: honeywell_target
-    entity_id: climate.honeywell_home_thermostat
-    attribute: temperature
-    on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_hw_target
-            text: !lambda |-
-              static char buf[12];
-              snprintf(buf, sizeof(buf), "%.0f°F", x);
-              return buf;
-
-  # --- Zone thermostat ---
+  # Zone thermostat (Air Conditioner)
   - platform: homeassistant
     id: thermo2_current
     entity_id: climate.30786325755351_climate
     attribute: current_temperature
     on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_t2_current
-            text: !lambda |-
-              static char buf[12];
-              snprintf(buf, sizeof(buf), "%.1f°F", x);
-              return buf;
+      - lvgl.label.update:
+          id: lbl_t2_current
+          text: !lambda |-
+            static char buf[8];
+            snprintf(buf, sizeof(buf), "%.0f°", x);
+            return buf;
 
   - platform: homeassistant
     id: thermo2_target
     entity_id: climate.30786325755351_climate
     attribute: temperature
     on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_t2_target
-            text: !lambda |-
-              static char buf[12];
-              snprintf(buf, sizeof(buf), "%.0f°F", x);
-              return buf;
+      - lvgl.label.update:
+          id: lbl_t2_target
+          text: !lambda |-
+            static char buf[10];
+            snprintf(buf, sizeof(buf), "%.0f°C", x);
+            return buf;
 
-  # --- Air quality ---
+  # Dehumidifier target humidity
+  - platform: homeassistant
+    id: humidifier_target
+    entity_id: humidifier.147334558381061_humidifier
+    attribute: humidity
+    on_value:
+      - lvgl.label.update:
+          id: lbl_dehum_target
+          text: !lambda |-
+            static char buf[8];
+            snprintf(buf, sizeof(buf), "%.0f%%", x);
+            return buf;
+
+  # Air quality
   - platform: homeassistant
     id: pm25
     entity_id: sensor.cyclo_uv_310_pm2_5
     on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_pm25_val
-            text: !lambda |-
-              static char buf[16];
-              snprintf(buf, sizeof(buf), "%.0f μg/m³", x);
-              return buf;
+      - lvgl.label.update:
+          id: lbl_pm25_val
+          text: !lambda |-
+            static char buf[16];
+            snprintf(buf, sizeof(buf), "%.0f μg/m³", x);
+            return buf;
 
-  # --- Diagnostics ---
+  # Diagnostics
   - platform: uptime
     name: "Uptime"
     entity_category: diagnostic
@@ -364,144 +361,142 @@ sensor:
     entity_category: diagnostic
 
 text_sensor:
-  # --- Weather condition ---
+  # Weather condition
   - platform: homeassistant
     id: weather_condition
     entity_id: weather.pirateweather
     on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_weather_condition
-            text: !lambda |-
-              if (x == "sunny")           return "Sunny";
-              if (x == "clear-night")     return "Clear Night";
-              if (x == "partlycloudy")    return "Partly Cloudy";
-              if (x == "cloudy")          return "Cloudy";
-              if (x == "fog")             return "Foggy";
-              if (x == "windy")           return "Windy";
-              if (x == "windy-variant")   return "Windy";
-              if (x == "rainy")           return "Rainy";
-              if (x == "pouring")         return "Heavy Rain";
-              if (x == "snowy")           return "Snowy";
-              if (x == "snowy-rainy")     return "Sleet";
-              if (x == "hail")            return "Hail";
-              if (x == "lightning")       return "Lightning";
-              if (x == "lightning-rainy") return "Thunderstorm";
-              if (x == "exceptional")     return "Exceptional";
-              return x.c_str();
+      - lvgl.label.update:
+          id: lbl_weather_condition
+          text: !lambda |-
+            if (x == "sunny")           return "Sunny";
+            if (x == "clear-night")     return "Clear Night";
+            if (x == "partlycloudy")    return "Partly cloudy";
+            if (x == "cloudy")          return "Cloudy";
+            if (x == "fog")             return "Foggy";
+            if (x == "windy")           return "Windy";
+            if (x == "windy-variant")   return "Windy";
+            if (x == "rainy")           return "Rainy";
+            if (x == "pouring")         return "Heavy Rain";
+            if (x == "snowy")           return "Snowy";
+            if (x == "snowy-rainy")     return "Sleet";
+            if (x == "hail")            return "Hail";
+            if (x == "lightning")       return "Lightning";
+            if (x == "lightning-rainy") return "Thunderstorm";
+            if (x == "exceptional")     return "Exceptional";
+            return x.c_str();
 
-  # --- Moon phase ---
-  - platform: homeassistant
-    id: moon_phase
-    entity_id: sensor.moon_phase
-    on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_moon
-            text: !lambda 'return ("Moon: " + x).c_str();'
-
-  # --- 7-day forecast summary ---
-  # Requires a template sensor in HA — see ha-pirateweather-forecast-template.yaml
-  # in this repo for the configuration to add to your HA configuration.yaml.
+  # 7-day forecast (requires ha-pirateweather-forecast-template.yaml in HA)
   - platform: homeassistant
     id: forecast_summary
     entity_id: sensor.pirateweather_forecast_summary
     on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_forecast
-            text: !lambda 'return x.c_str();'
+      - lvgl.label.update:
+          id: lbl_forecast
+          text: !lambda 'return x.c_str();'
 
-  # --- Honeywell HVAC state ---
+  # Moon phase
   - platform: homeassistant
-    id: honeywell_action
-    entity_id: climate.honeywell_home_thermostat
-    attribute: hvac_action
+    id: moon_phase
+    entity_id: sensor.moon_phase
     on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_hw_action
-            text: !lambda |-
-              if (x == "heating") return "Heating";
-              if (x == "cooling") return "Cooling";
-              if (x == "idle")    return "Idle";
-              if (x == "off")     return "Off";
-              return x.c_str();
+      - lvgl.label.update:
+          id: lbl_moon
+          text: !lambda 'return x.c_str();'
+
+  # Sun
+  - platform: homeassistant
+    id: sun_next_rising
+    entity_id: sun.sun
+    attribute: next_rising
+    on_value:
+      - lvgl.label.update:
+          id: lbl_sunrise
+          text: !lambda 'return x.c_str();'
 
   - platform: homeassistant
-    id: honeywell_mode
-    entity_id: climate.honeywell_home_thermostat
+    id: sun_next_setting
+    entity_id: sun.sun
+    attribute: next_setting
     on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_hw_mode
-            text: !lambda 'return ("Mode: " + x).c_str();'
+      - lvgl.label.update:
+          id: lbl_sunset
+          text: !lambda 'return x.c_str();'
 
-  # --- Zone thermostat HVAC state ---
+  - platform: homeassistant
+    id: sun_state
+    entity_id: sun.sun
+    on_value:
+      - lvgl.label.update:
+          id: lbl_sun_state
+          text: !lambda |-
+            if (x == "above_horizon") return "Above horizon";
+            if (x == "below_horizon") return "Below horizon";
+            return x.c_str();
+
+  # Zone thermostat HVAC action
   - platform: homeassistant
     id: thermo2_action
     entity_id: climate.30786325755351_climate
     attribute: hvac_action
     on_value:
-      then:
-        - lvgl.label.update:
-            id: lbl_t2_action
-            text: !lambda |-
-              if (x == "heating") return "Heating";
-              if (x == "cooling") return "Cooling";
-              if (x == "idle")    return "Idle";
-              if (x == "off")     return "Off";
-              return x.c_str();
+      - lvgl.label.update:
+          id: lbl_t2_action
+          text: !lambda |-
+            if (x == "heating") return "Heating";
+            if (x == "cooling") return "Cooling";
+            if (x == "fan_only") return "Fan only";
+            if (x == "idle")    return "Idle";
+            if (x == "off")     return "Off";
+            return x.c_str();
 
-  # --- Office light state ---
+  # Office light state
   - platform: homeassistant
     id: office_light_state
     entity_id: light.wiz_rgbw_tunable_f3a14a
     on_value:
-      then:
-        - if:
-            condition:
-              lambda: 'return x == "on";'
-            then:
-              - lvgl.label.update:
-                  id: lbl_light_status
-                  text: "ON"
-              - lambda: |
-                  lv_obj_set_style_bg_color(id(btn_office_light), lv_color_hex(0xff9100), LV_PART_MAIN);
-                  lv_obj_invalidate(id(btn_office_light));
-            else:
-              - lvgl.label.update:
-                  id: lbl_light_status
-                  text: "OFF"
-              - lambda: |
-                  lv_obj_set_style_bg_color(id(btn_office_light), lv_color_hex(0x2a2a2a), LV_PART_MAIN);
-                  lv_obj_invalidate(id(btn_office_light));
+      - if:
+          condition:
+            lambda: 'return x == "on";'
+          then:
+            - lvgl.label.update:
+                id: lbl_light_status
+                text: "ON"
+            - lambda: |
+                lv_obj_set_style_bg_color(id(btn_office_light), lv_color_hex(0xff9100), LV_PART_MAIN);
+                lv_obj_invalidate(id(btn_office_light));
+          else:
+            - lvgl.label.update:
+                id: lbl_light_status
+                text: "OFF"
+            - lambda: |
+                lv_obj_set_style_bg_color(id(btn_office_light), lv_color_hex(0x2a2a2a), LV_PART_MAIN);
+                lv_obj_invalidate(id(btn_office_light));
 
-  # --- Humidifier state ---
+  # Humidifier state
   - platform: homeassistant
     id: humidifier_state
     entity_id: humidifier.147334558381061_humidifier
     on_value:
-      then:
-        - if:
-            condition:
-              lambda: 'return x == "on";'
-            then:
-              - lvgl.label.update:
-                  id: lbl_humidifier_status
-                  text: "ON"
-              - lambda: |
-                  lv_obj_set_style_bg_color(id(btn_humidifier), lv_color_hex(0x2979ff), LV_PART_MAIN);
-                  lv_obj_invalidate(id(btn_humidifier));
-            else:
-              - lvgl.label.update:
-                  id: lbl_humidifier_status
-                  text: "OFF"
-              - lambda: |
-                  lv_obj_set_style_bg_color(id(btn_humidifier), lv_color_hex(0x2a2a2a), LV_PART_MAIN);
-                  lv_obj_invalidate(id(btn_humidifier));
+      - if:
+          condition:
+            lambda: 'return x == "on";'
+          then:
+            - lvgl.label.update:
+                id: lbl_humidifier_status
+                text: "ON"
+            - lambda: |
+                lv_obj_set_style_bg_color(id(btn_humidifier), lv_color_hex(0x2979ff), LV_PART_MAIN);
+                lv_obj_invalidate(id(btn_humidifier));
+          else:
+            - lvgl.label.update:
+                id: lbl_humidifier_status
+                text: "OFF"
+            - lambda: |
+                lv_obj_set_style_bg_color(id(btn_humidifier), lv_color_hex(0x2a2a2a), LV_PART_MAIN);
+                lv_obj_invalidate(id(btn_humidifier));
 
-  # --- WiFi diagnostics ---
+  # WiFi diagnostics
   - platform: wifi_info
     ip_address:
       name: "IP Address"
@@ -514,790 +509,19 @@ text_sensor:
       entity_category: diagnostic
 
 # ==============================================================================
-# LVGL Dashboard
-# Layout (effective 1280×800 landscape after 90° software rotation):
-#   y   0–43  : status bar (clock + date)      — top_layer
-#   y  44–757 : page content area (714px tall)
-#   y 758–799 : tab bar (page navigation)       — top_layer
-# ==============================================================================
-lvgl:
-  displays:
-    - my_display
-  touchscreens:
-    - my_touchscreen
-  log_level: WARN
-  rotation: 90       # Software rotation: physical 800×1280 → logical 1280×800
-
-  # style_definitions used to stamp dark-grey appearance on all buttons,
-  # replacing the theme: block that allowed the default LVGL theme to win.
-  style_definitions:
-    - id: style_btn_default
-      bg_color: 0x2a2a2a
-      bg_opa: 1
-      text_color: 0xffffff
-      border_color: 0x404040
-      border_width: 1
-      radius: 10
-    - id: style_btn_round
-      bg_color: 0x303030
-      bg_opa: 1
-      text_color: 0xffffff
-      border_color: 0x404040
-      border_width: 1
-    - id: style_tab_active
-      bg_color: 0x1a3a6a
-      bg_opa: 1
-      border_width: 0
-      radius: 0
-    - id: style_tab_inactive
-      bg_color: 0x0a0a0a
-      bg_opa: 1
-      border_width: 0
-      radius: 0
-
-  top_layer:
-    widgets:
-      # Status bar
-      - obj:
-          x: 0
-          y: 0
-          width: 1280
-          height: 44
-          bg_color: 0x0a0a0a
-          bg_opa: 1
-          border_width: 0
-          radius: 0
-          pad_left: 16
-          pad_right: 16
-          pad_top: 0
-          pad_bottom: 0
-          widgets:
-            - label:
-                id: lbl_date
-                text: "---"
-                text_color: 0x9e9e9e
-                text_font: montserrat_20
-                align: left_mid
-            - label:
-                id: lbl_clock
-                text: "00:00"
-                text_color: 0xffffff
-                text_font: montserrat_28
-                align: right_mid
-
-      # Tab bar
-      - obj:
-          x: 0
-          y: 758
-          width: 1280
-          height: 42
-          bg_color: 0x0a0a0a
-          bg_opa: 1
-          border_width: 0
-          radius: 0
-          pad_all: 0
-          layout:
-            type: flex
-            flex_flow: row
-          widgets:
-            - button:
-                id: tab_btn_weather
-                width: 640
-                height: 42
-                styles: style_tab_active
-                border_width: 0
-                radius: 0
-                widgets:
-                  - label:
-                      id: tab_lbl_weather
-                      text: "Weather & Thermostat"
-                      text_color: 0x2979ff
-                      text_font: montserrat_18
-                      align: center
-                on_press:
-                  - lvgl.page.show: page_weather
-            - button:
-                id: tab_btn_env
-                width: 640
-                height: 42
-                styles: style_tab_inactive
-                border_width: 0
-                radius: 0
-                widgets:
-                  - label:
-                      id: tab_lbl_env
-                      text: "Environment & Controls"
-                      text_color: 0x666666
-                      text_font: montserrat_18
-                      align: center
-                on_press:
-                  - lvgl.page.show: page_env
-                  - lvgl.widget.update:
-                      id: tab_btn_weather
-                      bg_color: 0x0a0a0a
-                      bg_opa: 1
-                  - lvgl.label.update:
-                      id: tab_lbl_weather
-                      text_color: 0x666666
-                  - lvgl.widget.update:
-                      id: tab_btn_env
-                      bg_color: 0x1a3a6a
-                      bg_opa: 1
-                  - lvgl.label.update:
-                      id: tab_lbl_env
-                      text_color: 0x2979ff
-
-  # --------------------------------------------------------------------------
-  # Pages
-  # --------------------------------------------------------------------------
-  pages:
-
-    # =========================================================================
-    # Page 1: Weather & Thermostat
-    # Content area: 1280 wide × 714 tall (y 44–757)
-    # Left 630px = weather  |  Right 650px = Honeywell thermostat
-    # =========================================================================
-    - id: page_weather
-      bg_color: 0x1e1e1e
-      bg_opa: 1
-      on_load:
-        - lvgl.widget.update:
-            id: tab_btn_weather
-            bg_color: 0x1a3a6a
-            bg_opa: 1
-        - lvgl.label.update:
-            id: tab_lbl_weather
-            text_color: 0x2979ff
-        - lvgl.widget.update:
-            id: tab_btn_env
-            bg_color: 0x0a0a0a
-            bg_opa: 1
-        - lvgl.label.update:
-            id: tab_lbl_env
-            text_color: 0x666666
-      widgets:
-        # Left column — Weather
-        - obj:
-            x: 0
-            y: 44
-            width: 630
-            height: 714
-            bg_color: 0x141414
-            bg_opa: 1
-            border_width: 0
-            pad_top: 28
-            pad_left: 28
-            pad_right: 28
-            pad_bottom: 20
-            layout:
-              type: flex
-              flex_flow: column
-              pad_row: 10
-            widgets:
-              - label:
-                  text: "Current Weather"
-                  text_color: 0x666666
-                  text_font: montserrat_16
-                  width: 100%
-
-              # Temperature (large, centred)
-              - label:
-                  id: lbl_weather_temp
-                  text: "--°F"
-                  text_color: 0xffffff
-                  text_font: montserrat_48
-                  text_align: center
-                  width: 574
-
-              # Pressure (smaller, centred below temp)
-              - obj:
-                  width: 574
-                  height: 30
-                  bg_opa: 0
-                  border_width: 0
-                  layout:
-                    type: flex
-                    flex_flow: row
-                    flex_align_main: center
-                    pad_column: 8
-                  widgets:
-                    - label:
-                        text: "Pressure:"
-                        text_color: 0x666666
-                        text_font: montserrat_20
-                    - label:
-                        id: lbl_weather_pressure
-                        text: "-- hPa"
-                        text_color: 0x64b5f6
-                        text_font: montserrat_20
-
-              - label:
-                  id: lbl_weather_condition
-                  text: "---"
-                  text_color: 0xbdbdbd
-                  text_font: montserrat_28
-                  text_align: center
-                  width: 100%
-
-              # Divider
-              - obj:
-                  width: 100%
-                  height: 2
-                  bg_color: 0x383838
-                  bg_opa: 1
-                  border_width: 0
-                  pad_all: 0
-
-              - label:
-                  text: "7-Day Forecast"
-                  text_color: 0x666666
-                  text_font: montserrat_14
-                  width: 100%
-
-              # Forecast lines — populated from sensor.pirateweather_forecast_summary
-              - label:
-                  id: lbl_forecast
-                  text: "Loading..."
-                  text_color: 0xd4d4d4
-                  text_font: montserrat_16
-                  width: 100%
-                  long_mode: wrap
-
-              # Divider
-              - obj:
-                  width: 100%
-                  height: 2
-                  bg_color: 0x383838
-                  bg_opa: 1
-                  border_width: 0
-                  pad_all: 0
-
-              - label:
-                  id: lbl_moon
-                  text: "Moon: ---"
-                  text_color: 0x9e9e9e
-                  text_font: montserrat_20
-                  width: 100%
-
-        # Vertical divider
-        - obj:
-            x: 630
-            y: 44
-            width: 2
-            height: 714
-            bg_color: 0x383838
-            bg_opa: 1
-            border_width: 0
-
-        # Right column — Honeywell Thermostat
-        - obj:
-            x: 632
-            y: 44
-            width: 648
-            height: 714
-            bg_color: 0x141414
-            bg_opa: 1
-            border_width: 0
-            pad_top: 28
-            pad_left: 32
-            pad_right: 32
-            pad_bottom: 20
-            layout:
-              type: flex
-              flex_flow: column
-              flex_align_cross: center
-              pad_row: 18
-            widgets:
-              - label:
-                  text: "Honeywell Thermostat"
-                  text_color: 0x666666
-                  text_font: montserrat_18
-                  text_align: center
-                  width: 100%
-
-              # Current temperature
-              - label:
-                  id: lbl_hw_current
-                  text: "--.-°F"
-                  text_color: 0xffffff
-                  text_font: montserrat_48
-                  text_align: center
-                  width: 100%
-
-              # Mode and action — two centred labels stacked
-              - label:
-                  id: lbl_hw_mode
-                  text: "Mode: ---"
-                  text_color: 0x9e9e9e
-                  text_font: montserrat_20
-                  text_align: center
-                  width: 100%
-              - label:
-                  id: lbl_hw_action
-                  text: "---"
-                  text_color: 0x2979ff
-                  text_font: montserrat_20
-                  text_align: center
-                  width: 100%
-
-              # Divider
-              - obj:
-                  width: 100%
-                  height: 2
-                  bg_color: 0x383838
-                  bg_opa: 1
-                  border_width: 0
-                  pad_all: 0
-
-              - label:
-                  text: "Setpoint"
-                  text_color: 0x666666
-                  text_font: montserrat_18
-                  text_align: center
-                  width: 100%
-
-              # [−]  target  [+]
-              - obj:
-                  width: 100%
-                  height: 90
-                  bg_opa: 0
-                  border_width: 0
-                  layout:
-                    type: flex
-                    flex_flow: row
-                    flex_align_main: center
-                    flex_align_cross: center
-                    pad_column: 20
-                  widgets:
-                    - button:
-                        width: 90
-                        height: 90
-                        bg_color: 0x2a2a2a
-                        bg_opa: 1
-                        border_color: 0x404040
-                        border_width: 1
-                        radius: 45
-                        widgets:
-                          - label:
-                              text: "−"
-                              text_font: montserrat_36
-                              text_color: 0xffffff
-                              align: center
-                        on_press:
-                          - homeassistant.service:
-                              service: climate.set_temperature
-                              variables:
-                                t: !lambda 'return id(honeywell_target).state - 1.0f;'
-                              data:
-                                entity_id: climate.honeywell_home_thermostat
-                                temperature: "{{ t }}"
-
-                    - label:
-                        id: lbl_hw_target
-                        text: "--°F"
-                        text_color: 0xff9100
-                        text_font: montserrat_44
-                        text_align: center
-                        width: 140
-
-                    - button:
-                        width: 90
-                        height: 90
-                        bg_color: 0x2a2a2a
-                        bg_opa: 1
-                        border_color: 0x404040
-                        border_width: 1
-                        radius: 45
-                        widgets:
-                          - label:
-                              text: "+"
-                              text_font: montserrat_36
-                              text_color: 0xffffff
-                              align: center
-                        on_press:
-                          - homeassistant.service:
-                              service: climate.set_temperature
-                              variables:
-                                t: !lambda 'return id(honeywell_target).state + 1.0f;'
-                              data:
-                                entity_id: climate.honeywell_home_thermostat
-                                temperature: "{{ t }}"
-
-    # =========================================================================
-    # Page 2: Environment & Controls
-    # Content area: 1280 wide × 714 tall (y 44–757)
-    # Row 1: 3 sensor tiles (temp / humidity / pressure)
-    # Row 2: Office light | PM2.5 | Humidifier
-    # Row 3: Zone thermostat with setpoint control
-    # =========================================================================
-    - id: page_env
-      bg_color: 0x1e1e1e
-      bg_opa: 1
-      on_load:
-        - lvgl.widget.update:
-            id: tab_btn_env
-            bg_color: 0x1a3a6a
-            bg_opa: 1
-        - lvgl.label.update:
-            id: tab_lbl_env
-            text_color: 0x2979ff
-        - lvgl.widget.update:
-            id: tab_btn_weather
-            bg_color: 0x0a0a0a
-            bg_opa: 1
-        - lvgl.label.update:
-            id: tab_lbl_weather
-            text_color: 0x666666
-      widgets:
-        # Content container with padding and column layout
-        - obj:
-            x: 0
-            y: 44
-            width: 1280
-            height: 714
-            bg_opa: 0
-            border_width: 0
-            pad_top: 14
-            pad_left: 14
-            pad_right: 14
-            pad_bottom: 14
-            layout:
-              type: flex
-              flex_flow: column
-              pad_row: 12
-
-            widgets:
-              # ==============================================================
-              # Row 1 — Indoor sensor tiles  (each ~411px wide × 155px tall)
-              # ==============================================================
-              - obj:
-                  width: 1252
-                  height: 155
-                  bg_opa: 0
-                  border_width: 0
-                  layout:
-                    type: flex
-                    flex_flow: row
-                    pad_column: 10
-
-                  widgets:
-                    # Indoor Temperature
-                    - obj:
-                        width: 410
-                        height: 155
-                        bg_color: 0x2a2a2a
-                        bg_opa: 1
-                        border_color: 0x404040
-                        border_width: 1
-                        radius: 12
-                        pad_all: 16
-                        layout:
-                          type: flex
-                          flex_flow: column
-                          flex_align_cross: center
-                          flex_align_main: center
-                          pad_row: 6
-                        widgets:
-                          - label:
-                              text: "Indoor Temp"
-                              text_color: 0x9e9e9e
-                              text_font: montserrat_16
-                          - label:
-                              id: lbl_indoor_temp
-                              text: "--.-°F"
-                              text_color: 0xffffff
-                              text_font: montserrat_36
-
-                    # Indoor Humidity
-                    - obj:
-                        width: 410
-                        height: 155
-                        bg_color: 0x2a2a2a
-                        bg_opa: 1
-                        border_color: 0x404040
-                        border_width: 1
-                        radius: 12
-                        pad_all: 16
-                        layout:
-                          type: flex
-                          flex_flow: column
-                          flex_align_cross: center
-                          flex_align_main: center
-                          pad_row: 6
-                        widgets:
-                          - label:
-                              text: "Indoor Humidity"
-                              text_color: 0x9e9e9e
-                              text_font: montserrat_16
-                          - label:
-                              id: lbl_indoor_humidity
-                              text: "--%"
-                              text_color: 0x2979ff
-                              text_font: montserrat_36
-
-                    # Indoor Pressure
-                    - obj:
-                        width: 432
-                        height: 155
-                        bg_color: 0x2a2a2a
-                        bg_opa: 1
-                        border_color: 0x404040
-                        border_width: 1
-                        radius: 12
-                        pad_all: 16
-                        layout:
-                          type: flex
-                          flex_flow: column
-                          flex_align_cross: center
-                          flex_align_main: center
-                          pad_row: 6
-                        widgets:
-                          - label:
-                              text: "Pressure"
-                              text_color: 0x9e9e9e
-                              text_font: montserrat_16
-                          - label:
-                              id: lbl_indoor_pressure
-                              text: "-- hPa"
-                              text_color: 0xbdbdbd
-                              text_font: montserrat_36
-
-              # ==============================================================
-              # Row 2 — Controls  (each ~411px wide × 135px tall)
-              # ==============================================================
-              - obj:
-                  width: 1252
-                  height: 135
-                  bg_opa: 0
-                  border_width: 0
-                  layout:
-                    type: flex
-                    flex_flow: row
-                    pad_column: 10
-
-                  widgets:
-                    # Office light toggle
-                    - button:
-                        id: btn_office_light
-                        width: 410
-                        height: 135
-                        bg_color: 0x2a2a2a
-                        bg_opa: 1
-                        border_color: 0x404040
-                        border_width: 1
-                        radius: 12
-                        layout:
-                          type: flex
-                          flex_flow: column
-                          flex_align_cross: center
-                          flex_align_main: center
-                          pad_row: 4
-                        widgets:
-                          - label:
-                              text: "Office Light"
-                              text_color: 0x9e9e9e
-                              text_font: montserrat_16
-                          - label:
-                              id: lbl_light_status
-                              text: "--"
-                              text_color: 0xffffff
-                              text_font: montserrat_32
-                        on_press:
-                          - homeassistant.service:
-                              service: light.toggle
-                              data:
-                                entity_id: light.wiz_rgbw_tunable_f3a14a
-
-                    # PM2.5 tile (read-only)
-                    - obj:
-                        width: 410
-                        height: 135
-                        bg_color: 0x2a2a2a
-                        bg_opa: 1
-                        border_color: 0x404040
-                        border_width: 1
-                        radius: 12
-                        pad_all: 16
-                        layout:
-                          type: flex
-                          flex_flow: column
-                          flex_align_cross: center
-                          flex_align_main: center
-                          pad_row: 4
-                        widgets:
-                          - label:
-                              text: "PM2.5 Air Quality"
-                              text_color: 0x9e9e9e
-                              text_font: montserrat_16
-                          - label:
-                              id: lbl_pm25_val
-                              text: "-- μg/m³"
-                              text_color: 0x00c853
-                              text_font: montserrat_28
-
-                    # Humidifier toggle
-                    - button:
-                        id: btn_humidifier
-                        width: 432
-                        height: 135
-                        bg_color: 0x2a2a2a
-                        bg_opa: 1
-                        border_color: 0x404040
-                        border_width: 1
-                        radius: 12
-                        layout:
-                          type: flex
-                          flex_flow: column
-                          flex_align_cross: center
-                          flex_align_main: center
-                          pad_row: 4
-                        widgets:
-                          - label:
-                              text: "Humidifier"
-                              text_color: 0x9e9e9e
-                              text_font: montserrat_16
-                          - label:
-                              id: lbl_humidifier_status
-                              text: "--"
-                              text_color: 0xffffff
-                              text_font: montserrat_32
-                        on_press:
-                          - homeassistant.service:
-                              service: humidifier.toggle
-                              data:
-                                entity_id: humidifier.147334558381061_humidifier
-
-              # ==============================================================
-              # Row 3 — Zone Thermostat  (full width × remaining height)
-              # ==============================================================
-              - obj:
-                  width: 1252
-                  height: 196
-                  bg_color: 0x2a2a2a
-                  bg_opa: 1
-                  border_color: 0x404040
-                  border_width: 1
-                  radius: 12
-                  pad_top: 20
-                  pad_left: 28
-                  pad_right: 28
-                  pad_bottom: 20
-                  layout:
-                    type: flex
-                    flex_flow: row
-                    flex_align_cross: center
-                    pad_column: 0
-
-                  widgets:
-                    # Left: title, current temp, action
-                    - obj:
-                        width: 500
-                        height: 156
-                        bg_opa: 0
-                        border_width: 0
-                        layout:
-                          type: flex
-                          flex_flow: column
-                          flex_align_cross: start
-                          pad_row: 6
-                        widgets:
-                          - label:
-                              text: "Zone Thermostat"
-                              text_color: 0x9e9e9e
-                              text_font: montserrat_18
-                          - label:
-                              id: lbl_t2_current
-                              text: "--.-°F"
-                              text_color: 0xffffff
-                              text_font: montserrat_44
-                          - label:
-                              id: lbl_t2_action
-                              text: "---"
-                              text_color: 0x2979ff
-                              text_font: montserrat_20
-
-                    # Spacer
-                    - obj:
-                        width: 340
-                        height: 10
-                        bg_opa: 0
-                        border_width: 0
-
-                    # Right: setpoint [−] value [+]
-                    - obj:
-                        width: 412
-                        height: 156
-                        bg_opa: 0
-                        border_width: 0
-                        layout:
-                          type: flex
-                          flex_flow: row
-                          flex_align_main: center
-                          flex_align_cross: center
-                          pad_column: 18
-                        widgets:
-                          - button:
-                              width: 80
-                              height: 80
-                              styles: style_btn_round
-                              border_width: 1
-                              radius: 40
-                              widgets:
-                                - label:
-                                    text: "−"
-                                    text_font: montserrat_32
-                                    text_color: 0xffffff
-                                    align: center
-                              on_press:
-                                - homeassistant.service:
-                                    service: climate.set_temperature
-                                    variables:
-                                      t: !lambda 'return id(thermo2_target).state - 1.0f;'
-                                    data:
-                                      entity_id: climate.30786325755351_climate
-                                      temperature: "{{ t }}"
-
-                          - label:
-                              id: lbl_t2_target
-                              text: "--°F"
-                              text_color: 0xff9100
-                              text_font: montserrat_40
-                              text_align: center
-                              width: 120
-
-                          - button:
-                              width: 80
-                              height: 80
-                              styles: style_btn_round
-                              border_width: 1
-                              radius: 40
-                              widgets:
-                                - label:
-                                    text: "+"
-                                    text_font: montserrat_32
-                                    text_color: 0xffffff
-                                    align: center
-                              on_press:
-                                - homeassistant.service:
-                                    service: climate.set_temperature
-                                    variables:
-                                      t: !lambda 'return id(thermo2_target).state + 1.0f;'
-                                    data:
-                                      entity_id: climate.30786325755351_climate
-                                      temperature: "{{ t }}"
-
-# ==============================================================================
-# Periodic GSL3680 reset — prevents touch drift during long uptime
+# Intervals
 # ==============================================================================
 interval:
+  # GSL3680 periodic reset — prevents touch drift during long uptime
   - interval: 6h
     then:
       - switch.turn_off: display_power
       - delay: 1000ms
       - switch.turn_on: display_power
 
+
 # ==============================================================================
-# Utility buttons / switches
+# Buttons / switches
 # ==============================================================================
 button:
   - platform: restart
@@ -1319,3 +543,974 @@ switch:
     name: "Display Power"
     internal: true
     restore_mode: ALWAYS_ON
+
+image:
+  defaults:
+    byte_order: little_endian
+
+# ==============================================================================
+# LVGL Dashboard — single screen, 3-column layout
+#
+# Physical: 800x1280 portrait.  LVGL rotation: 90 → logical 1280x800.
+#
+# Zones (logical landscape):
+#   y   0– 39 : status bar (top_layer) — clock right, date left
+#   y  40–799 : content (3 columns, 760px tall)
+#
+# Column layout (content area 1280x760, 8px outer margin, 8px gaps):
+#   Col 1  x=  8  w=412  Weather / Sun / Moon
+#   Col 2  x=428  w=422  Indoor env tiles + pressure/temp/humidity charts
+#   Col 3  x=858  w=414  Office light, PM2.5, AC thermostat, Dehumidifier
+# ==============================================================================
+lvgl:
+  displays:
+    - my_display
+  touchscreens:
+    - my_touchscreen
+  log_level: WARN
+  rotation: 90
+  # Global screen background — must be set here to override LVGL's default purple theme
+  bg_color: 0x111111
+  bg_opa: 1
+
+  style_definitions:
+    # Dark card — rounded panel with subtle border
+    - id: style_card
+      bg_color: 0x1e1e1e
+      bg_opa: 1
+      border_color: 0x2d2d2d
+      border_width: 1
+      radius: 12
+      pad_all: 12
+    # Small sensor tile
+    - id: style_tile
+      bg_color: 0x252525
+      bg_opa: 1
+      border_color: 0x2d2d2d
+      border_width: 1
+      radius: 8
+      pad_all: 10
+    # Standard dark button
+    - id: style_btn
+      bg_color: 0x2a2a2a
+      bg_opa: 1
+      border_color: 0x404040
+      border_width: 1
+      radius: 10
+      text_color: 0xffffff
+    # Round ±1 button
+    - id: style_btn_round
+      bg_color: 0x2a2a2a
+      bg_opa: 1
+      border_color: 0x404040
+      border_width: 1
+      radius: 28
+      text_color: 0xffffff
+
+  top_layer:
+    widgets:
+      # Status bar — full width, 40px
+      - obj:
+          x: 0
+          y: 0
+          width: 1280
+          height: 40
+          bg_color: 0x0a0a0a
+          bg_opa: 1
+          border_width: 0
+          radius: 0
+          pad_left: 16
+          pad_right: 16
+          pad_top: 0
+          pad_bottom: 0
+          widgets:
+            - label:
+                id: lbl_date
+                text: "---"
+                text_color: 0x888888
+                text_font: montserrat_18
+                align: left_mid
+            - label:
+                id: lbl_clock
+                text: "00:00"
+                text_color: 0xffffff
+                text_font: montserrat_24
+                align: right_mid
+
+  pages:
+    - id: page_main
+      bg_color: 0x111111
+      bg_opa: 1
+      widgets:
+
+        # ==============================================================
+        # COLUMN 1 — Weather / Sun / Moon  (x=8, w=412, y=48)
+        # Cards: Weather h=408, Sun h=185, Moon h=58
+        # Total: 408+8+185+8+58 = 667, slack at bottom: 760-48-667=45px
+        # ==============================================================
+        - obj:
+            x: 8
+            y: 48
+            width: 412
+            height: 712
+            bg_opa: 0
+            border_width: 0
+            pad_all: 0
+
+            widgets:
+              # ---- WEATHER CARD ----
+              - obj:
+                  x: 0
+                  y: 0
+                  width: 412
+                  height: 408
+                  bg_color: 0x1e1e1e
+                  bg_opa: 1
+                  border_color: 0x2d2d2d
+                  border_width: 1
+                  radius: 12
+                  pad_all: 14
+
+                  widgets:
+                    # Condition (large, top-left)
+                    - label:
+                        id: lbl_weather_condition
+                        x: 0
+                        y: 0
+                        width: 240
+                        text: "Loading..."
+                        text_color: 0xffffff
+                        text_font: montserrat_24
+                    # Source tag
+                    - label:
+                        x: 0
+                        y: 30
+                        text: "PirateWeather"
+                        text_color: 0x888888
+                        text_font: montserrat_14
+                    # Temperature (right-aligned, same row as condition)
+                    - label:
+                        id: lbl_weather_temp
+                        x: 234
+                        y: 0
+                        width: 150
+                        text: "--.- °C"
+                        text_color: 0xffffff
+                        text_font: montserrat_24
+                        text_align: right
+                    # Pressure row
+                    - label:
+                        x: 0
+                        y: 56
+                        text: "Pressure:"
+                        text_color: 0x888888
+                        text_font: montserrat_16
+                    - label:
+                        id: lbl_weather_pressure
+                        x: 90
+                        y: 56
+                        width: 294
+                        text: "--.-- hPa"
+                        text_color: 0x64b5f6
+                        text_font: montserrat_16
+                    # Divider
+                    - obj:
+                        x: 0
+                        y: 82
+                        width: 384
+                        height: 1
+                        bg_color: 0x333333
+                        bg_opa: 1
+                        border_width: 0
+                    # Forecast header
+                    - label:
+                        x: 0
+                        y: 90
+                        text: "7-Day Forecast"
+                        text_color: 0x666666
+                        text_font: montserrat_12
+                    # Forecast lines (from sensor.pirateweather_forecast_summary)
+                    - label:
+                        id: lbl_forecast
+                        x: 0
+                        y: 108
+                        width: 384
+                        text: "Loading forecast..."
+                        text_color: 0xd0d0d0
+                        text_font: montserrat_16
+                        long_mode: wrap
+
+              # ---- SUN CARD ----
+              - obj:
+                  x: 0
+                  y: 416
+                  width: 412
+                  height: 185
+                  bg_color: 0x1e1e1e
+                  bg_opa: 1
+                  border_color: 0x2d2d2d
+                  border_width: 1
+                  radius: 12
+                  pad_all: 14
+
+                  widgets:
+                    - label:
+                        x: 0
+                        y: 0
+                        text: "Sun"
+                        text_color: 0xffd700
+                        text_font: montserrat_18
+                    - label:
+                        id: lbl_sun_state
+                        x: 200
+                        y: 2
+                        width: 184
+                        text: "---"
+                        text_color: 0x888888
+                        text_font: montserrat_14
+                        text_align: right
+                    # Divider
+                    - obj:
+                        x: 0
+                        y: 28
+                        width: 384
+                        height: 1
+                        bg_color: 0x333333
+                        bg_opa: 1
+                        border_width: 0
+                    - label:
+                        x: 0
+                        y: 38
+                        text: "Next rising:"
+                        text_color: 0x888888
+                        text_font: montserrat_14
+                    - label:
+                        id: lbl_sunrise
+                        x: 105
+                        y: 38
+                        width: 279
+                        text: "---"
+                        text_color: 0xffd700
+                        text_font: montserrat_14
+                        text_align: right
+                    - label:
+                        x: 0
+                        y: 62
+                        text: "Next setting:"
+                        text_color: 0x888888
+                        text_font: montserrat_14
+                    - label:
+                        id: lbl_sunset
+                        x: 105
+                        y: 62
+                        width: 279
+                        text: "---"
+                        text_color: 0xff8c00
+                        text_font: montserrat_14
+                        text_align: right
+                    # Simple day/night bar
+                    - obj:
+                        x: 0
+                        y: 96
+                        width: 384
+                        height: 10
+                        bg_color: 0x1a3060
+                        bg_opa: 1
+                        border_width: 0
+                        radius: 5
+                    - obj:
+                        x: 70
+                        y: 96
+                        width: 244
+                        height: 10
+                        bg_color: 0xffd700
+                        bg_opa: 1
+                        border_width: 0
+                        radius: 5
+                    - label:
+                        x: 0
+                        y: 114
+                        text: "Night"
+                        text_color: 0x555555
+                        text_font: montserrat_12
+                    - label:
+                        x: 150
+                        y: 114
+                        text: "Day"
+                        text_color: 0xffd700
+                        text_font: montserrat_12
+                    - label:
+                        x: 320
+                        y: 114
+                        text: "Night"
+                        text_color: 0x555555
+                        text_font: montserrat_12
+                    - label:
+                        x: 0
+                        y: 136
+                        text: "Approximate — fixed 06:00-20:00 display"
+                        text_color: 0x444444
+                        text_font: montserrat_10
+
+              # ---- MOON CARD ----
+              - obj:
+                  x: 0
+                  y: 609
+                  width: 412
+                  height: 58
+                  bg_color: 0x1e1e1e
+                  bg_opa: 1
+                  border_color: 0x2d2d2d
+                  border_width: 1
+                  radius: 12
+                  pad_left: 14
+                  pad_right: 14
+                  pad_top: 10
+                  pad_bottom: 10
+
+                  widgets:
+                    - label:
+                        x: 0
+                        y: 6
+                        text: "Moon Phase"
+                        text_color: 0x888888
+                        text_font: montserrat_16
+                    - label:
+                        id: lbl_moon
+                        x: 0
+                        y: 6
+                        width: 384
+                        text: "---"
+                        text_color: 0xd0d0ff
+                        text_font: montserrat_16
+                        text_align: right
+
+        # ==============================================================
+        # COLUMN 2 — Indoor Environment  (x=428, w=422, y=48)
+        # Cards: Tiles row h=82, Pressure h=214, Temp h=214, Humidity h=195
+        # 82+8+214+8+214+8+195 = 729, fits in 712px (trim to 712)
+        # Revised: Tiles h=78, Pressure h=205, Temp h=205, Humidity h=182
+        # 78+8+205+8+205+8+182=694, slack=18px
+        # ==============================================================
+        - obj:
+            x: 428
+            y: 48
+            width: 422
+            height: 712
+            bg_opa: 0
+            border_width: 0
+            pad_all: 0
+
+            widgets:
+              # ---- LUMI SENSOR TILES (3 side by side) ----
+              - obj:
+                  x: 0
+                  y: 0
+                  width: 422
+                  height: 78
+                  bg_opa: 0
+                  border_width: 0
+                  pad_all: 0
+
+                  widgets:
+                    # Tile 1: Indoor Temp
+                    - obj:
+                        x: 0
+                        y: 0
+                        width: 134
+                        height: 78
+                        bg_color: 0x252525
+                        bg_opa: 1
+                        border_color: 0x2d2d2d
+                        border_width: 1
+                        radius: 8
+                        pad_all: 10
+                        widgets:
+                          - label:
+                              x: 0
+                              y: 0
+                              text: "Indoor Temp"
+                              text_color: 0x888888
+                              text_font: montserrat_12
+                          - label:
+                              id: lbl_indoor_temp
+                              x: 0
+                              y: 18
+                              width: 114
+                              text: "--.- °C"
+                              text_color: 0xffffff
+                              text_font: montserrat_18
+
+                    # Tile 2: Indoor Pressure
+                    - obj:
+                        x: 142
+                        y: 0
+                        width: 134
+                        height: 78
+                        bg_color: 0x252525
+                        bg_opa: 1
+                        border_color: 0x2d2d2d
+                        border_width: 1
+                        radius: 8
+                        pad_all: 10
+                        widgets:
+                          - label:
+                              x: 0
+                              y: 0
+                              text: "Pressure"
+                              text_color: 0x888888
+                              text_font: montserrat_12
+                          - label:
+                              id: lbl_indoor_pressure
+                              x: 0
+                              y: 18
+                              width: 114
+                              text: "--- hPa"
+                              text_color: 0xffffff
+                              text_font: montserrat_14
+
+                    # Tile 3: Indoor Humidity
+                    - obj:
+                        x: 284
+                        y: 0
+                        width: 138
+                        height: 78
+                        bg_color: 0x252525
+                        bg_opa: 1
+                        border_color: 0x2d2d2d
+                        border_width: 1
+                        radius: 8
+                        pad_all: 10
+                        widgets:
+                          - label:
+                              x: 0
+                              y: 0
+                              text: "Humidity"
+                              text_color: 0x888888
+                              text_font: montserrat_12
+                          - label:
+                              id: lbl_indoor_humidity
+                              x: 0
+                              y: 18
+                              width: 118
+                              text: "--.--%"
+                              text_color: 0xffffff
+                              text_font: montserrat_18
+
+              # ---- INDOOR PRESSURE ----
+              - obj:
+                  x: 0
+                  y: 86
+                  width: 422
+                  height: 205
+                  bg_color: 0x1e1e1e
+                  bg_opa: 1
+                  border_color: 0x2d2d2d
+                  border_width: 1
+                  radius: 12
+                  pad_left: 14
+                  pad_right: 14
+                  pad_top: 12
+                  pad_bottom: 12
+
+                  widgets:
+                    - label:
+                        x: 0
+                        y: 0
+                        text: "Indoor Pressure"
+                        text_color: 0xffffff
+                        text_font: montserrat_16
+                    - label:
+                        id: lbl_pressure_big
+                        x: 0
+                        y: 28
+                        width: 394
+                        text: "--- hPa"
+                        text_color: 0xe07000
+                        text_font: montserrat_40
+                        text_align: center
+                    - label:
+                        x: 0
+                        y: 94
+                        text: "Session range:"
+                        text_color: 0x666666
+                        text_font: montserrat_12
+                    - label:
+                        id: lbl_pressure_range
+                        x: 0
+                        y: 112
+                        width: 394
+                        text: "---"
+                        text_color: 0x888888
+                        text_font: montserrat_14
+                        text_align: center
+                    - label:
+                        x: 0
+                        y: 148
+                        width: 394
+                        text: "Since last reboot"
+                        text_color: 0x444444
+                        text_font: montserrat_10
+                        text_align: center
+
+              # ---- INDOOR TEMPERATURE ----
+              - obj:
+                  x: 0
+                  y: 299
+                  width: 422
+                  height: 205
+                  bg_color: 0x1e1e1e
+                  bg_opa: 1
+                  border_color: 0x2d2d2d
+                  border_width: 1
+                  radius: 12
+                  pad_left: 14
+                  pad_right: 14
+                  pad_top: 12
+                  pad_bottom: 12
+
+                  widgets:
+                    - label:
+                        x: 0
+                        y: 0
+                        text: "Indoor Temperature"
+                        text_color: 0xffffff
+                        text_font: montserrat_16
+                    - label:
+                        id: lbl_temp_big
+                        x: 0
+                        y: 28
+                        width: 394
+                        text: "--.- °C"
+                        text_color: 0xe07000
+                        text_font: montserrat_40
+                        text_align: center
+                    - label:
+                        x: 0
+                        y: 94
+                        text: "Session range:"
+                        text_color: 0x666666
+                        text_font: montserrat_12
+                    - label:
+                        id: lbl_temp_range
+                        x: 0
+                        y: 112
+                        width: 394
+                        text: "---"
+                        text_color: 0x888888
+                        text_font: montserrat_14
+                        text_align: center
+                    - label:
+                        x: 0
+                        y: 148
+                        width: 394
+                        text: "Since last reboot"
+                        text_color: 0x444444
+                        text_font: montserrat_10
+                        text_align: center
+
+              # ---- INDOOR HUMIDITY ----
+              - obj:
+                  x: 0
+                  y: 512
+                  width: 422
+                  height: 185
+                  bg_color: 0x1e1e1e
+                  bg_opa: 1
+                  border_color: 0x2d2d2d
+                  border_width: 1
+                  radius: 12
+                  pad_left: 14
+                  pad_right: 14
+                  pad_top: 12
+                  pad_bottom: 12
+
+                  widgets:
+                    - label:
+                        x: 0
+                        y: 0
+                        text: "Indoor Humidity"
+                        text_color: 0xffffff
+                        text_font: montserrat_16
+                    - label:
+                        id: lbl_humidity_big
+                        x: 0
+                        y: 28
+                        width: 394
+                        text: "--.--%"
+                        text_color: 0xe07000
+                        text_font: montserrat_40
+                        text_align: center
+                    - label:
+                        x: 0
+                        y: 94
+                        text: "Session range:"
+                        text_color: 0x666666
+                        text_font: montserrat_12
+                    - label:
+                        id: lbl_humidity_range
+                        x: 0
+                        y: 112
+                        width: 394
+                        text: "---"
+                        text_color: 0x888888
+                        text_font: montserrat_14
+                        text_align: center
+
+        # ==============================================================
+        # COLUMN 3 — Controls  (x=858, w=414, y=48)
+        # Cards: Office h=78, PM2.5 h=78, AC h=262, Dehumidifier h=262
+        # 78+8+78+8+262+8+262 = 704, fits in 712px
+        # ==============================================================
+        - obj:
+            x: 858
+            y: 48
+            width: 414
+            height: 712
+            bg_opa: 0
+            border_width: 0
+            pad_all: 0
+
+            widgets:
+              # ---- OFFICE LIGHT ----
+              - obj:
+                  x: 0
+                  y: 0
+                  width: 414
+                  height: 78
+                  bg_color: 0x1e1e1e
+                  bg_opa: 1
+                  border_color: 0x2d2d2d
+                  border_width: 1
+                  radius: 12
+                  pad_left: 14
+                  pad_right: 14
+                  pad_top: 10
+                  pad_bottom: 10
+
+                  widgets:
+                    - label:
+                        x: 0
+                        y: 0
+                        text: "Office"
+                        text_color: 0xffffff
+                        text_font: montserrat_18
+                    - label:
+                        x: 0
+                        y: 26
+                        text: "wiz rgbw tunable f3a14a"
+                        text_color: 0x888888
+                        text_font: montserrat_12
+                    # Toggle button (right side)
+                    - button:
+                        id: btn_office_light
+                        x: 298
+                        y: 8
+                        width: 102
+                        height: 46
+                        bg_color: 0x2a2a2a
+                        bg_opa: 1
+                        border_color: 0x404040
+                        border_width: 1
+                        radius: 23
+                        widgets:
+                          - label:
+                              id: lbl_light_status
+                              text: "OFF"
+                              text_color: 0x888888
+                              text_font: montserrat_18
+                              align: center
+                        on_press:
+                          - homeassistant.service:
+                              service: light.toggle
+                              data:
+                                entity_id: light.wiz_rgbw_tunable_f3a14a
+
+              # ---- PM2.5 ----
+              - obj:
+                  x: 0
+                  y: 86
+                  width: 414
+                  height: 78
+                  bg_color: 0x1e1e1e
+                  bg_opa: 1
+                  border_color: 0x2d2d2d
+                  border_width: 1
+                  radius: 12
+                  pad_left: 14
+                  pad_right: 14
+                  pad_top: 10
+                  pad_bottom: 10
+
+                  widgets:
+                    - label:
+                        x: 0
+                        y: 0
+                        text: "PM2.5"
+                        text_color: 0xffffff
+                        text_font: montserrat_18
+                    - label:
+                        id: lbl_pm25_val
+                        x: 0
+                        y: 26
+                        width: 386
+                        text: "Unavailable"
+                        text_color: 0x888888
+                        text_font: montserrat_16
+
+              # ---- AIR CONDITIONER ----
+              - obj:
+                  x: 0
+                  y: 172
+                  width: 414
+                  height: 262
+                  bg_color: 0x1e1e1e
+                  bg_opa: 1
+                  border_color: 0x2d2d2d
+                  border_width: 1
+                  radius: 12
+                  pad_left: 14
+                  pad_right: 14
+                  pad_top: 12
+                  pad_bottom: 12
+
+                  widgets:
+                    - label:
+                        x: 0
+                        y: 0
+                        text: "Air Conditioner"
+                        text_color: 0xffffff
+                        text_font: montserrat_18
+                    # HVAC action (Fan only / Cooling / Heating / Idle)
+                    - label:
+                        id: lbl_t2_action
+                        x: 0
+                        y: 26
+                        text: "---"
+                        text_color: 0x4fc3f7
+                        text_font: montserrat_16
+                    # Current temperature (large, bottom-left)
+                    - label:
+                        x: 0
+                        y: 56
+                        text: "Current"
+                        text_color: 0x888888
+                        text_font: montserrat_14
+                    - label:
+                        id: lbl_t2_current
+                        x: 0
+                        y: 76
+                        text: "--°"
+                        text_color: 0xffffff
+                        text_font: montserrat_48
+                    # Setpoint label
+                    - label:
+                        x: 0
+                        y: 148
+                        text: "Setpoint:"
+                        text_color: 0x888888
+                        text_font: montserrat_14
+                    - label:
+                        id: lbl_t2_target
+                        x: 82
+                        y: 148
+                        text: "--°C"
+                        text_color: 0x4fc3f7
+                        text_font: montserrat_14
+                    # [−] [+] setpoint buttons (right side)
+                    - button:
+                        x: 250
+                        y: 60
+                        width: 60
+                        height: 60
+                        bg_color: 0x2a2a2a
+                        bg_opa: 1
+                        border_color: 0x404040
+                        border_width: 1
+                        radius: 30
+                        widgets:
+                          - label:
+                              text: "−"
+                              text_font: montserrat_32
+                              text_color: 0xffffff
+                              align: center
+                        on_press:
+                          - homeassistant.service:
+                              service: climate.set_temperature
+                              variables:
+                                t: !lambda 'return id(thermo2_target).state - 1.0f;'
+                              data:
+                                entity_id: climate.30786325755351_climate
+                                temperature: "{{ t }}"
+                    - button:
+                        x: 322
+                        y: 60
+                        width: 60
+                        height: 60
+                        bg_color: 0x2a2a2a
+                        bg_opa: 1
+                        border_color: 0x404040
+                        border_width: 1
+                        radius: 30
+                        widgets:
+                          - label:
+                              text: "+"
+                              text_font: montserrat_32
+                              text_color: 0xffffff
+                              align: center
+                        on_press:
+                          - homeassistant.service:
+                              service: climate.set_temperature
+                              variables:
+                                t: !lambda 'return id(thermo2_target).state + 1.0f;'
+                              data:
+                                entity_id: climate.30786325755351_climate
+                                temperature: "{{ t }}"
+                    # Divider
+                    - obj:
+                        x: 0
+                        y: 175
+                        width: 386
+                        height: 1
+                        bg_color: 0x333333
+                        bg_opa: 1
+                        border_width: 0
+                    - label:
+                        x: 0
+                        y: 183
+                        text: "↓ Set temp  —  tap ±1°C"
+                        text_color: 0x555555
+                        text_font: montserrat_12
+
+              # ---- DEHUMIDIFIER ----
+              - obj:
+                  x: 0
+                  y: 442
+                  width: 414
+                  height: 262
+                  bg_color: 0x1e1e1e
+                  bg_opa: 1
+                  border_color: 0x2d2d2d
+                  border_width: 1
+                  radius: 12
+                  pad_left: 14
+                  pad_right: 14
+                  pad_top: 12
+                  pad_bottom: 12
+
+                  widgets:
+                    - label:
+                        x: 0
+                        y: 0
+                        text: "Dehumidifier"
+                        text_color: 0xffffff
+                        text_font: montserrat_18
+                    # Running state
+                    - label:
+                        id: lbl_humidifier_status
+                        x: 0
+                        y: 26
+                        text: "---"
+                        text_color: 0x4fc3f7
+                        text_font: montserrat_16
+                    # Target humidity (large)
+                    - label:
+                        x: 0
+                        y: 56
+                        text: "Target"
+                        text_color: 0x888888
+                        text_font: montserrat_14
+                    - label:
+                        id: lbl_dehum_target
+                        x: 0
+                        y: 76
+                        text: "--%"
+                        text_color: 0xffffff
+                        text_font: montserrat_48
+                    # Power toggle
+                    - button:
+                        id: btn_humidifier
+                        x: 250
+                        y: 50
+                        width: 130
+                        height: 44
+                        bg_color: 0x2a2a2a
+                        bg_opa: 1
+                        border_color: 0x404040
+                        border_width: 1
+                        radius: 8
+                        widgets:
+                          - label:
+                              text: "Power"
+                              text_font: montserrat_18
+                              text_color: 0xffffff
+                              align: center
+                        on_press:
+                          - homeassistant.service:
+                              service: humidifier.toggle
+                              data:
+                                entity_id: humidifier.147334558381061_humidifier
+                    # [−5%] [+5%] humidity target buttons
+                    - button:
+                        x: 250
+                        y: 104
+                        width: 60
+                        height: 60
+                        bg_color: 0x2a2a2a
+                        bg_opa: 1
+                        border_color: 0x404040
+                        border_width: 1
+                        radius: 30
+                        widgets:
+                          - label:
+                              text: "−"
+                              text_font: montserrat_32
+                              text_color: 0xffffff
+                              align: center
+                        on_press:
+                          - homeassistant.service:
+                              service: humidifier.set_humidity
+                              variables:
+                                h: !lambda 'return id(humidifier_target).state - 5.0f;'
+                              data:
+                                entity_id: humidifier.147334558381061_humidifier
+                                humidity: "{{ h }}"
+                    - button:
+                        x: 322
+                        y: 104
+                        width: 60
+                        height: 60
+                        bg_color: 0x2a2a2a
+                        bg_opa: 1
+                        border_color: 0x404040
+                        border_width: 1
+                        radius: 30
+                        widgets:
+                          - label:
+                              text: "+"
+                              text_font: montserrat_32
+                              text_color: 0xffffff
+                              align: center
+                        on_press:
+                          - homeassistant.service:
+                              service: humidifier.set_humidity
+                              variables:
+                                h: !lambda 'return id(humidifier_target).state + 5.0f;'
+                              data:
+                                entity_id: humidifier.147334558381061_humidifier
+                                humidity: "{{ h }}"
+                    # Divider
+                    - obj:
+                        x: 0
+                        y: 183
+                        width: 386
+                        height: 1
+                        bg_color: 0x333333
+                        bg_opa: 1
+                        border_width: 0
+                    - label:
+                        x: 0
+                        y: 191
+                        text: "↓ Humidity setpoint  —  tap ±5%"
+                        text_color: 0x555555
+                        text_font: montserrat_12
