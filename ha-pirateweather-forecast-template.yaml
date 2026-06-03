@@ -1,0 +1,57 @@
+# ==============================================================================
+# Home Assistant template sensor — PirateWeather 7-day forecast summary
+# ==============================================================================
+#
+# Add this to your HA configuration.yaml (or split into a separate file via
+# the !include directive). After adding, restart Home Assistant.
+#
+# This creates sensor.pirateweather_forecast_summary, which the ESPHome LVGL
+# config subscribes to and displays in the "7-Day Forecast" section of the
+# weather panel.
+#
+# Output format (one line per day, newline-separated):
+#   Mon  Sunny        78° / 60°
+#   Tue  P.Cloudy     72° / 55°
+#   Wed  Rain         68° / 52°
+#   ...
+# ==============================================================================
+
+template:
+  - sensor:
+      - name: "PirateWeather Forecast Summary"
+        unique_id: pirateweather_forecast_summary
+        icon: mdi:weather-partly-cloudy
+        state: >-
+          {%- set fc = state_attr('weather.pirateweather', 'forecast') -%}
+          {%- if fc is none or fc | length == 0 -%}
+            No forecast data
+          {%- else -%}
+            {%- set days  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] -%}
+            {%- set cmap  = {
+              'sunny':            'Sunny',
+              'clear-night':      'Clear',
+              'partlycloudy':     'P.Cloudy',
+              'cloudy':           'Cloudy',
+              'fog':              'Fog',
+              'windy':            'Windy',
+              'windy-variant':    'Windy',
+              'rainy':            'Rain',
+              'pouring':          'Heavy Rain',
+              'snowy':            'Snow',
+              'snowy-rainy':      'Sleet',
+              'hail':             'Hail',
+              'lightning':        'Lightning',
+              'lightning-rainy':  'T-Storm',
+              'exceptional':      'Special'
+            } -%}
+            {%- for i in range([fc | length, 7] | min) -%}
+              {%- set d  = fc[i] -%}
+              {%- set dt = as_datetime(d.datetime) -%}
+              {%- set hi = d.temperature | round | int -%}
+              {%- set lo = d.templow     | round | int -%}
+              {%- set c  = cmap.get(d.condition, d.condition) -%}
+              {{- '%-4s %-11s %3d° / %d°' | format(days[dt.weekday()], c, hi, lo) -}}
+              {%- if not loop.last %}
+          {% endif -%}
+            {%- endfor -%}
+          {%- endif %}
