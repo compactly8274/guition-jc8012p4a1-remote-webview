@@ -154,7 +154,7 @@ display:
     id: my_display
     update_interval: never
     reset_pin: GPIO27
-    auto_clear_enabled: true
+    auto_clear_enabled: false
 
 output:
   - platform: ledc
