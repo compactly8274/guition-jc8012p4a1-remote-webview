@@ -139,6 +139,14 @@ captive_portal:
 # Home Assistant / OTA / Logging
 # ==============================================================================
 api:
+  # Disable the 15-min auto-reboot when no API client is connected.
+  # The daily 3 AM restart (below) and the manual restart button are
+  # still in effect. Without this, if HA is temporarily down (HA
+  # restart, network blip) or the API encryption key on the HA side
+  # doesn't match the device, the device goes into a reboot loop
+  # because ESPHome's default is to force a reboot after 15 minutes
+  # of no API client. 0s disables the auto-reboot entirely.
+  reboot_timeout: 0s
   encryption:
     # IMPORTANT: Replace this placeholder with a real 32-byte base64 string
     # before flashing. See the top of this file for the PowerShell command
