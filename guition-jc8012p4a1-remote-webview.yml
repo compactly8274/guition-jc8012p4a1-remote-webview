@@ -333,3 +333,19 @@ time:
         hours: 3
         then:
           - button.press: restart_button
+
+# Periodic GSL3680 touch controller reset. The controller occasionally
+# gets into a bad state where a single X-axis electrode reports as
+# constantly touched, causing ghost touches. A 5-second power cycle
+# of the display clears it. Empirically, ghosts start appearing after
+# ~1 hour of continuous operation, so this cycles every 90 minutes
+# as a preventive measure. Adjust the interval if ghosts return
+# at a different cadence, or remove this block if the issue doesn't
+# recur.
+interval:
+  - id: touch_reset_interval
+    interval: 90min
+    then:
+      - switch.turn_off: display_power
+      - delay: 5s
+      - switch.turn_on: display_power
