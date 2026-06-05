@@ -9,11 +9,29 @@
 #   Touch    : GSL3680 capacitive (I2C)
 #   Backlight: GPIO23 via LEDC
 # ==============================================================================
+#
+# BEFORE DEPLOYING:
+#   1. Edit the api.encryption.key below — it MUST be a 32-byte base64 string.
+#      Generate one with PowerShell:
+#        [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }) -as [byte[]])
+#      Then paste it where "REPLACE_WITH_YOUR_API_ENCRYPTION_KEY" appears below.
+#      The same key must be configured in Home Assistant for the device to
+#      connect — HA will offer to set it up the first time the device
+#      advertises itself.
+#
+#   2. Edit rwv_server_host (the "your-ha-server-ip" placeholder below) and
+#      device_use_address (in the wifi block) to match your network. The
+#      default is a placeholder so the YAML will not connect out of the box
+#      — that's intentional. Don't deploy a public repo with your real IPs.
+#
+# ==============================================================================
 
 substitutions:
   device_name: "p4-webview"
   friendly_name: "P4 WebView Panel"
-  rwv_server_host: "{your HA IP}"
+  # The IP/hostname of the machine running the RemoteWebView server.
+  # Replace "your-ha-server-ip" with your actual HA server address.
+  rwv_server_host: "your-ha-server-ip"
   rwv_server_port: "8081"
   rwv_device_id: "p4-panel-1"
 
@@ -31,11 +49,10 @@ esphome:
       # Hard reset the GSL3680 touch controller before it initializes.
       # Without this the controller sometimes starts with stale calibration
       # state from the previous session, causing phantom/ghost touches.
-      # 1000ms hold-down ensures the GSL3680 fully discharges before reinit.
       - switch.turn_off: display_power
-      - delay: 1000ms
+      - delay: 500ms
       - switch.turn_on: display_power
-      - delay: 1000ms
+      - delay: 500ms
       - logger.log: "Display power cycled — GSL3680 reset complete"
 
 esp32:
@@ -103,6 +120,10 @@ esp32_hosted:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  # Static IP for this device. Replace with the IP you want the device at
+  # on your network. The mDNS hostname (p4-webview.local) will also work
+  # for the initial flash via USB; OTA can use this IP afterwards.
+  use_address: "your-device-ip"
   output_power: "8.5db"
   # REQUIRED on P4+C6: power saving causes SDIO packet loss during association
   power_save_mode: NONE
@@ -119,7 +140,10 @@ captive_portal:
 # ==============================================================================
 api:
   encryption:
-    key: "{your encryption password}"
+    # IMPORTANT: Replace this placeholder with a real 32-byte base64 string
+    # before flashing. See the top of this file for the PowerShell command
+    # to generate one. The same key must be configured in Home Assistant.
+    key: "REPLACE_WITH_YOUR_API_ENCRYPTION_KEY"
 
 ota:
   - platform: esphome
@@ -177,24 +201,24 @@ i2c:
     sda: GPIO7
     scl: GPIO8
     scan: false
-    # Reduced from 400kHz — lower frequency reduces noise-induced read errors
-    # that can trigger spurious touch events on the GSL3680.
-    frequency: 100kHz
+    frequency: 400kHz
 
 # ==============================================================================
 # Touchscreen — GSL3680
 #
-# The display panel is physically portrait (800x1280). remote_webview rotates
-# rendered content 90° so it fills the screen in landscape. Touch coordinates
-# from the GSL3680 are in raw portrait space and must be transformed to match.
+# FIX: Ghost touches after restart are caused by a transform mismatch with
+# remote_webview's rotation: 90 (landscape). The display panel is physically
+# portrait (800x1280). remote_webview rotates the rendered content 90° so it
+# fills the screen in landscape. The touch controller reports raw portrait
+# coordinates which must be transformed to match.
 #
-# Empirically verified transform for this panel with rotation: 90:
-#   swap_xy: false  — axes do NOT need swapping on this panel revision
-#   mirror_x: true  — mirrors X axis to correct left/right alignment
-#   mirror_y: false — no Y mirror needed
+# For rotation: 90 (landscape, USB on left side):
+#   swap_xy: true   — swaps X and Y axes to match the rotated orientation
+#   mirror_x: true  — mirrors X to correct left/right after swap
+#   mirror_y: false — no Y mirror needed for 90° CCW rotation
 #
-# Do not change swap_xy based on the theoretical 90° rotation formula —
-# the GSL3680 firmware on this panel handles axis mapping internally.
+# If touches are still off after flashing, try toggling mirror_x or mirror_y
+# one at a time — the exact values can vary by panel revision.
 # ==============================================================================
 touchscreen:
   - platform: gsl3680
@@ -202,12 +226,16 @@ touchscreen:
     reset_pin: GPIO22
     interrupt_pin: GPIO21
     transform:
-      swap_xy: false
-      mirror_x: true
       mirror_y: false
+      mirror_x: true
+      swap_xy: false
     on_touch:
       - light.turn_on: backlight
       - lambda: |-
+          static uint32_t last_touch = 0;
+          uint32_t now = millis();
+          if (now - last_touch < 100) return;
+          last_touch = now;
           ESP_LOGI("touch", "x=%d y=%d x_raw=%d y_raw=%d", touch.x, touch.y, touch.x_raw, touch.y_raw);
 
 # ==============================================================================
@@ -223,28 +251,13 @@ remote_webview:
   rotation: 90
   full_frame_tile_count: 1
   full_frame_area_threshold: 0.2
-  # Less frequent forced full redraws reduce visual disruption
-  full_frame_every: 40
+  full_frame_every: 20
   every_nth_frame: 1
-  # 75ms (~13fps) reduces WiFi pressure vs 50ms (20fps), smoother in practice
-  min_frame_interval: 75
-  # Higher quality reduces compression artifacts at modest bandwidth cost
-  jpeg_quality: 75
+  min_frame_interval: 50
+  jpeg_quality: 60
   max_bytes_per_msg: 524288
   big_endian: false
 
-
-# ==============================================================================
-# Periodic GSL3680 reset
-# The touch controller can drift into a ghost-touch state after long uptime.
-# Cycling power every 6 hours clears accumulated noise without user intervention.
-# ==============================================================================
-interval:
-  - interval: 6h
-    then:
-      - switch.turn_off: display_power
-      - delay: 1000ms
-      - switch.turn_on: display_power
 
 # ==============================================================================
 # Utility buttons / sensors
@@ -252,9 +265,9 @@ interval:
 button:
   - platform: restart
     name: "Restart Panel"
+    id: restart_button
   - platform: factory_reset
     name: "Factory Reset"
-  # One-tap display power cycle to clear ghost touches without unplugging
   - platform: template
     name: "Restart Display Power"
     icon: mdi:monitor-shimmer
@@ -299,3 +312,16 @@ text_sensor:
 image:
   defaults:
     byte_order: little_endian
+
+# Daily 3 AM auto-restart — clears any state drift accumulated over the day
+# (ghost touches, websocket stalemates, RAM creep). The id matches the
+# restart button above.
+time:
+  - platform: homeassistant
+    id: ha_time
+    on_time:
+      - seconds: 0
+        minutes: 0
+        hours: 3
+        then:
+          - button.press: restart_button
