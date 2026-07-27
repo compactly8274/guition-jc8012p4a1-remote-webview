@@ -90,11 +90,15 @@ esp_ldo:
 # ==============================================================================
 external_components:
   # GSL3680 capacitive touchscreen driver
-  # IMPORTANT: Must use willumpie82's fork — it uses the ESP-IDF esp_lcd_touch
-  # API (esp_lcd_touch_new_i2c_gsl3680) which is the correct driver for this
-  # panel. The kvj fork does manual I2C firmware loading and does not correctly
-  # initialize the GSL3680 on the JC8012P4A1, causing touch to not register.
-  - source: github://willumpie82/esphome@dev
+  # Uses kvj's fork which integrates with ESPHome's i2c: component properly.
+  # The willumpie82 fork bypasses ESPHome's I2C abstraction and calls
+  # esp_lcd_new_panel_io_i2c(I2C_NUM_0) directly, which conflicts with
+  # ESPHome's own i2c_master bus initialization on the same port, causing
+  # a panic: "CONFLICT! driver_ng is not allowed to be used with this old
+  # driver". If touch doesn't register with this driver, the issue is
+  # likely the firmware data (gsl_config_data_id) not matching the panel
+  # revision, not the driver framework itself.
+  - source: github://kvj/esphome@jd9365_gsl3680
     refresh: 1d
     components: [gsl3680]
 
