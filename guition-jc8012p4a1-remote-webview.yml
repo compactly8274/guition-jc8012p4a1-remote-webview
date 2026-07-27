@@ -58,7 +58,8 @@ esphome:
 esp32:
   board: esp32-p4-evboard
   variant: esp32p4
-  # FIX: 400MHz is the correct documented max for P4, not 360MHz
+  # 400MHz is the documented max for the ESP32-P4; 360MHz is a conservative
+  # setting that some early silicon required for stability.
   cpu_frequency: 360MHz
   flash_size: 16MB
   framework:
@@ -89,13 +90,17 @@ esp_ldo:
 # ==============================================================================
 external_components:
   # GSL3680 capacitive touchscreen driver
-  - source: github://kvj/esphome@jd9365_gsl3680
+  # IMPORTANT: Must use willumpie82's fork — it uses the ESP-IDF esp_lcd_touch
+  # API (esp_lcd_touch_new_i2c_gsl3680) which is the correct driver for this
+  # panel. The kvj fork does manual I2C firmware loading and does not correctly
+  # initialize the GSL3680 on the JC8012P4A1, causing touch to not register.
+  - source: github://willumpie82/esphome@dev
     refresh: 1d
     components: [gsl3680]
 
   # RemoteWebView client component
   - source: github://strange-v/RemoteWebViewClient@main
-    refresh: 0s
+    refresh: 1d
     components: [remote_webview]
 
   # NOTE: mipi_dsi is built into ESPHome >= 2025.8.0 with native JC8012P4A1
