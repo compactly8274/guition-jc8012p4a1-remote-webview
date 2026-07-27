@@ -238,6 +238,9 @@ touchscreen:
     id: my_touchscreen
     reset_pin: GPIO22
     interrupt_pin: GPIO21
+    # touch_timeout: forces a minimum hold time before a release is detected.
+    # Helps filter spurious release/re-press flicker from noisy GSL3680 readings.
+    touch_timeout: 50ms
     transform:
       mirror_y: false
       mirror_x: true
@@ -245,10 +248,42 @@ touchscreen:
     on_touch:
       - light.turn_on: backlight
       - lambda: |-
-          static uint32_t last_touch = 0;
+          // ---- GSL3680 noise filter ----
+          // The GSL3680 is known for noisy readings on this panel. Three filters:
+          // 1. Time debounce: drop touches within 80ms of the last accepted touch
+          // 2. Coordinate jump filter: drop touches that move >500px in a single
+          //    frame (impossible for a human finger, indicates noise)
+          // 3. Edge rejection: drop touches at coordinate 0,0 or max edge that
+          //    appear without any prior movement (classic ghost touch signature)
+          static uint32_t last_touch_ms = 0;
+          static int16_t last_x = -1, last_y = -1;
           uint32_t now = millis();
-          if (now - last_touch < 100) return;
-          last_touch = now;
+
+          // Filter 1: time debounce
+          if (now - last_touch_ms < 80) return;
+          last_touch_ms = now;
+
+          // Filter 2: coordinate jump filter
+          if (last_x >= 0 && last_y >= 0) {
+            int dx = abs(touch.x - last_x);
+            int dy = abs(touch.y - last_y);
+            if (dx > 500 || dy > 500) {
+              ESP_LOGW("touch_filter", "Dropped jump: dx=%d dy=%d", dx, dy);
+              return;
+            }
+          }
+
+          // Filter 3: edge ghost rejection
+          // Touches at exactly (0,0) or at the exact max corner with no
+          // prior movement are ghost touches from electrode noise
+          if ((touch.x == 0 && touch.y == 0) ||
+              (touch.x == (int)(touch.x_raw_max_ & 0xFFF) && touch.y == 0)) {
+            ESP_LOGW("touch_filter", "Dropped edge ghost: x=%d y=%d", touch.x, touch.y);
+            return;
+          }
+
+          last_x = touch.x;
+          last_y = touch.y;
           ESP_LOGI("touch", "x=%d y=%d x_raw=%d y_raw=%d", touch.x, touch.y, touch.x_raw, touch.y_raw);
 
 # ==============================================================================
@@ -345,8 +380,8 @@ time:
 # of the display clears it. Empirically, ghosts start appearing after
 # ~1 hour of continuous operation, so this cycles every 90 minutes
 # as a preventive measure. Adjust the interval if ghosts return
-# at a different cadence, or remove this block if the issue doesn't
-# recur.
+# at a different cadence, or remove this block if the noise filters
+# in the on_touch lambda above catch them adequately.
 interval:
   - id: touch_reset_interval
     interval: 90min
