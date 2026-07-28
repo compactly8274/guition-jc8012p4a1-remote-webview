@@ -278,11 +278,13 @@ touchscreen:
           }
 
           // Filter 3: edge ghost rejection
-          // Touches at exactly (0,0) or at the exact max corner with no
-          // prior movement are ghost touches from electrode noise
+          // Touches at exactly (0,0) are a classic GSL3680 ghost signature
+          // from electrode noise. Also drop touches where the raw coordinate
+          // is at the extreme edge (0 or 0xFFF) — these are noise spikes.
           if ((touch.x == 0 && touch.y == 0) ||
-              (touch.x == (int)(touch.x_raw_max_ & 0xFFF) && touch.y == 0)) {
-            ESP_LOGW("touch_filter", "Dropped edge ghost: x=%d y=%d", touch.x, touch.y);
+              (touch.x_raw == 0 && touch.y_raw == 0) ||
+              (touch.x_raw >= 0x0FFF && touch.y_raw == 0)) {
+            ESP_LOGW("touch_filter", "Dropped edge ghost: x=%d y=%d raw=%d,%d", touch.x, touch.y, touch.x_raw, touch.y_raw);
             return;
           }
 
